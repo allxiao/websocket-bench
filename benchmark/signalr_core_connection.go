@@ -17,7 +17,6 @@ import (
 var _ Subject = (*SignalrCoreConnection)(nil)
 
 type SignalrCoreConnection struct {
-	log  chan string
 	host string
 
 	counter *util.Counter
@@ -32,22 +31,23 @@ func (s *SignalrCoreConnection) Name() string {
 	return "SignalR Core Connection"
 }
 
-func (s *SignalrCoreConnection) logError(id string, msg string, err error) {
-	log.Printf("[Error][%s] %s due to %s", id, msg, err)
-	s.counter.Stat("error", 1)
+func (s *SignalrCoreConnection) logError(errorGroup string, uid string, msg string, err error) {
+	log.Printf("[Error][%s] %s due to %s", uid, msg, err)
+	if errorGroup != "" {
+		s.counter.Stat(errorGroup, 1)
+	}
 }
 
 func (s *SignalrCoreConnection) logLatency(latency int64) {
 	index := int(latency / 100)
 	if index >= 10 {
-		s.counter.Stat("latency:gt:1000", 1)
+		s.counter.Stat("message:gt:1000", 1)
 	} else {
-		s.counter.Stat(fmt.Sprintf("latency:lt:%d00", index+1), 1)
+		s.counter.Stat(fmt.Sprintf("message:lt:%d00", index+1), 1)
 	}
 }
 
 func (s *SignalrCoreConnection) Setup(config *Config) error {
-	s.log = make(chan string)
 	s.host = config.Host
 
 	s.counter = util.NewCounter()
@@ -65,25 +65,19 @@ func (s *SignalrCoreConnection) processLatency() {
 		var content SignalRCoreInvocation
 		err := json.Unmarshal(msgReceived.Content[:len(msgReceived.Content)-1], &content)
 		if err != nil {
-			log.Printf("[Error][%s] %s due to %s", msgReceived.ClientID, "Failed to decode incoming message", err)
-			s.counter.Stat("received:decode_error", 1)
+			s.logError("message:decode_error", msgReceived.ClientID, "Failed to decode incoming message", err)
 			continue
 		}
 
 		if content.Type == 1 && content.Target == "echo" {
 			sendStart, err := strconv.ParseInt(content.Arguments[1], 10, 64)
 			if err != nil {
-				log.Printf("[Error][%s] %s due to %s", msgReceived.ClientID, "Failed to decode start timestamp", err)
-				s.counter.Stat("received:decode_error", 1)
+				s.logError("message:decode_error", msgReceived.ClientID, "Failed to decode start timestamp", err)
 				continue
 			}
 			s.logLatency((time.Now().UnixNano() - sendStart) / 1000000)
 		}
 	}
-}
-
-func (s *SignalrCoreConnection) LogChannel() chan string {
-	return s.log
 }
 
 func (s *SignalrCoreConnection) Counters() map[string]int64 {
@@ -93,8 +87,8 @@ func (s *SignalrCoreConnection) Counters() map[string]int64 {
 func (s *SignalrCoreConnection) newSession() (session *Session, err error) {
 	defer func() {
 		if err != nil {
-			s.counter.Stat("connecting", -1)
-			s.counter.Stat("connect:error", 1)
+			s.counter.Stat("connection:inprogress", -1)
+			s.counter.Stat("connection:error", 1)
 		}
 	}()
 
@@ -104,10 +98,10 @@ func (s *SignalrCoreConnection) newSession() (session *Session, err error) {
 		return
 	}
 
-	s.counter.Stat("connecting", 1)
+	s.counter.Stat("connection:inprogress", 1)
 	negotiateResponse, err := http.Post("http://"+s.host+"/chat/negotiate", "text/plain;charset=UTF-8", nil)
 	if err != nil {
-		s.logError(id, "Failed to negotiate with the server", err)
+		s.logError("connection:error", id, "Failed to negotiate with the server", err)
 		return
 	}
 	defer negotiateResponse.Body.Close()
@@ -116,21 +110,21 @@ func (s *SignalrCoreConnection) newSession() (session *Session, err error) {
 	var handshakeContent SignalRCoreHandshakeResp
 	err = decoder.Decode(&handshakeContent)
 	if err != nil {
-		s.logError("", "Failed to decode connection id", err)
+		s.logError("connection:error", id, "Failed to decode connection id", err)
 		return
 	}
 
 	wsURL := "ws://" + s.host + "/chat?id=" + handshakeContent.ConnectionId
 	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
-		s.logError(id, "Failed to connect to websocket", err)
+		s.logError("connection:error", id, "Failed to connect to websocket", err)
 		return nil, err
 	}
 
 	session = NewSession(id, s.received, s.counter, c)
 	if session != nil {
-		s.counter.Stat("connecting", -1)
-		s.counter.Stat("connected", 1)
+		s.counter.Stat("connection:inprogress", -1)
+		s.counter.Stat("connection:established", 1)
 		return
 	}
 
@@ -155,6 +149,7 @@ func (s *SignalrCoreConnection) DoEnsureConnection(count int, conPerSec int) err
 			if nextBatch > conPerSec {
 				nextBatch = conPerSec
 			}
+			log.Printf("Spawn %d clients, current clients count %d", nextBatch, len(s.sessions))
 			for i := 0; i < nextBatch; i++ {
 				session, err := s.newSession()
 				if err != nil {
@@ -170,6 +165,7 @@ func (s *SignalrCoreConnection) DoEnsureConnection(count int, conPerSec int) err
 			}
 		}
 	} else {
+		log.Printf("Reduce clients count from %d to %d", len(s.sessions), count)
 		extra := s.sessions[count:]
 		s.sessions = s.sessions[:count]
 		for _, session := range extra {
@@ -219,5 +215,10 @@ func (s *SignalrCoreConnection) doStopSendUnsafe() error {
 		session.RemoveMessageGenerator()
 	}
 
+	return nil
+}
+
+func (s *SignalrCoreConnection) DoClear(prefix string) error {
+	s.counter.Clear(prefix)
 	return nil
 }

@@ -21,11 +21,11 @@ type Config struct {
 type Subject interface {
 	Name() string
 	Setup(config *Config) error
-	LogChannel() chan string
 	Counters() map[string]int64
 
 	DoEnsureConnection(count int, conPerSec int) error
 	DoSend(clients int, intervalMillis int) error
+	DoClear(prefix string) error
 }
 
 type Message interface {
@@ -165,10 +165,10 @@ func (s *Session) sendingWorker() {
 			}
 		case msg := <-s.Sending:
 			err := s.Conn.WriteMessage(msg.Type(), msg.Bytes())
-			s.counter.Stat("sent", 1)
+			s.counter.Stat("message:sent", 1)
 			if err != nil {
 				log.Println("Error sending message: ", err)
-				s.counter.Stat("sent:error", 1)
+				s.counter.Stat("message:send_error", 1)
 			}
 		}
 	}
@@ -181,15 +181,15 @@ func (s *Session) receivedWorker(id string) {
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure) {
 				log.Println("Failed to read incoming message:", err)
-				s.counter.Stat("received:error", 1)
+				s.counter.Stat("message:receive_error", 1)
 				s.States <- "error"
 			}
-			s.counter.Stat("connected", -1)
-			s.counter.Stat("disconnected", 1)
+			s.counter.Stat("connection:established", -1)
+			s.counter.Stat("connection:closed", 1)
 			s.States <- "closed"
 			break
 		}
-		s.counter.Stat("received", 1)
+		s.counter.Stat("message:received", 1)
 		s.received <- MessageReceived{id, msg}
 	}
 }

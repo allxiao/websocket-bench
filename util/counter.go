@@ -1,10 +1,13 @@
 package util
 
-import "log"
+import (
+	"log"
+	"strings"
+)
 
 type countRecord struct {
 	name    string
-	control bool
+	control string
 	value   int64
 }
 
@@ -31,29 +34,29 @@ func NewCounter() *Counter {
 // This is the only method that can be called by the producers from multiple threads / routines.
 func (c *Counter) Stat(name string, value int64) {
 	if !c.stopped {
-		c.recordChannel <- countRecord{name, false, value}
+		c.recordChannel <- countRecord{name, "", value}
 	}
 }
 
 // Snapshot taks a new snapshot of the current counter result.
 func (c *Counter) Snapshot() map[string]int64 {
 	if !c.stopped {
-		c.recordChannel <- countRecord{"snapshot", true, 0}
+		c.recordChannel <- countRecord{"", "snapshot", 0}
 		return <-c.resultChannel
 	}
 	return nil
 }
 
-// Clear reset all count results to 0.
-func (c *Counter) Clear() {
+// Clear reset all counts that start with prefix.
+func (c *Counter) Clear(prefix string) {
 	if !c.stopped {
-		c.recordChannel <- countRecord{"clear", true, 0}
+		c.recordChannel <- countRecord{prefix, "clear", 0}
 	}
 }
 
 // Stop closes the counter and it will not accumulate future records.
 func (c *Counter) Stop() {
-	c.recordChannel <- countRecord{"stop", true, 0}
+	c.recordChannel <- countRecord{"", "stop", 0}
 }
 
 func (c *Counter) start() {
@@ -62,10 +65,18 @@ func (c *Counter) start() {
 		defer close(c.resultChannel)
 
 		for record := range c.recordChannel {
-			if record.control {
-				switch record.name {
+			if record.control != "" {
+				switch record.control {
 				case "clear":
+					original := c.stats
 					c.stats = make(map[string]int64)
+					if record.name != "" {
+						for k, v := range original {
+							if !strings.HasPrefix(k, record.name) {
+								c.stats[k] = v
+							}
+						}
+					}
 				case "stop":
 					return
 				case "snapshot":

@@ -52,13 +52,13 @@ func (c *Controller) Invoke(invocation *Invocation, reply *struct{}) error {
 		return fmt.Errorf("nil Invocation")
 	}
 
-	log.Printf("%s(%s)", invocation.Command, strings.Join(invocation.Arguments, ", "))
-
 	subject := reflect.ValueOf(c.Subject)
 	method := subject.MethodByName("Do" + invocation.Command)
 	if !method.IsValid() {
 		return fmt.Errorf("Command '%s' was not found", invocation.Command)
 	}
+
+	log.Printf("%s(%s)", invocation.Command, strings.Join(invocation.Arguments, ", "))
 
 	argsCount := method.Type().NumIn()
 	if len(invocation.Arguments) != argsCount {

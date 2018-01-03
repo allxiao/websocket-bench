@@ -132,35 +132,58 @@ func (c *Controller) Run(config *benchmark.Config) error {
 		case "c":
 			fallthrough
 		case "EnsureConnection":
-			if len(parts) != 2 {
-				fmt.Println("SYNTAX: c <connection_number>")
+			if len(parts) < 2 || len(parts) > 3 {
+				fmt.Println("SYNTAX: c <connection_count> [connection_per_second]")
+				break
 			}
 			connection, err := strconv.Atoi(parts[1])
 			if err != nil {
 				fmt.Println("ERROR: ", err)
+				break
 			}
 			if connection < 0 {
 				fmt.Println("ERROR: connection number is negative")
+				break
 			}
+			connPerSecond := math.MaxInt32
+			if len(parts) == 3 {
+				connPerSecond, err = strconv.Atoi(parts[2])
+				if err != nil {
+					fmt.Println("ERROR: ", err)
+					break
+				}
+			}
+			if connPerSecond < 0 {
+				fmt.Println("ERROR: connection per second is negative")
+				break
+			}
+
 			for i, agentProxy := range c.Agents {
 				agentConnection := c.SplitNumber(connection, i)
+				agentConnPerSec := c.SplitNumber(connPerSecond, i)
 				err := agentProxy.Client.Call("Agent.Invoke", &agent.Invocation{
 					Command:   "EnsureConnection",
-					Arguments: []string{strconv.Itoa(agentConnection)},
+					Arguments: []string{strconv.Itoa(agentConnection), strconv.Itoa(agentConnPerSec)},
 				}, nil)
 				if err != nil {
 					fmt.Printf("ERROR[%s]: %v\n", agentProxy.Address, err)
 				}
+			}
+			connection -= connPerSecond
+			if connection < 0 {
+				break
 			}
 		case "s":
 			fallthrough
 		case "Send":
 			if len(parts) != 3 {
 				fmt.Println("SYNTAX: s <clients> <interval_millis>")
+				break
 			}
 			clients, err := strconv.Atoi(parts[1])
 			if err != nil {
 				fmt.Println("ERROR: ", err)
+				break
 			}
 			if clients < 0 {
 				clients = math.MaxInt32

@@ -138,7 +138,7 @@ func (s *SignalrCoreConnection) newSession() (session *Session, err error) {
 	return
 }
 
-func (s *SignalrCoreConnection) DoEnsureConnection(count int) error {
+func (s *SignalrCoreConnection) DoEnsureConnection(count int, conPerSec int) error {
 	if count < 0 {
 		return nil
 	}
@@ -148,14 +148,26 @@ func (s *SignalrCoreConnection) DoEnsureConnection(count int) error {
 
 	diff := count - len(s.sessions)
 	if diff > 0 {
-		for i := 0; i < diff; i++ {
-			session, err := s.newSession()
-			if err != nil {
-				return err
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for _ = range ticker.C {
+			nextBatch := diff
+			if nextBatch > conPerSec {
+				nextBatch = conPerSec
 			}
-			session.Start()
-			session.WriteTextMessage("{\"protocol\":\"json\"}\x1e")
-			s.sessions = append(s.sessions, session)
+			for i := 0; i < nextBatch; i++ {
+				session, err := s.newSession()
+				if err != nil {
+					return err
+				}
+				session.Start()
+				session.WriteTextMessage("{\"protocol\":\"json\"}\x1e")
+				s.sessions = append(s.sessions, session)
+			}
+			diff -= nextBatch
+			if diff <= 0 {
+				break
+			}
 		}
 	} else {
 		extra := s.sessions[count:]

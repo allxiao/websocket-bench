@@ -24,7 +24,8 @@ type Subject interface {
 	LogChannel() chan string
 	Counters() map[string]int64
 
-	DoEnsureConnection(count int) error
+	DoEnsureConnection(count int, conPerSec int) error
+	DoSend(clients int, intervalMillis int) error
 }
 
 type Message interface {

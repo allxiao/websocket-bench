@@ -12,11 +12,12 @@ import (
 	"github.com/ArieShout/websocket-bench/util"
 	"github.com/gorilla/websocket"
 	"github.com/teris-io/shortid"
+	"github.com/vmihailenco/msgpack"
 )
 
-var _ Subject = (*SignalrCoreConnection)(nil)
+var _ Subject = (*SignalrCoreMsgpack)(nil)
 
-type SignalrCoreConnection struct {
+type SignalrCoreMsgpack struct {
 	host string
 
 	counter *util.Counter
@@ -27,18 +28,18 @@ type SignalrCoreConnection struct {
 	received chan MessageReceived
 }
 
-func (s *SignalrCoreConnection) Name() string {
-	return "SignalR Core Connection"
+func (s *SignalrCoreMsgpack) Name() string {
+	return "SignalR Core MessagePack"
 }
 
-func (s *SignalrCoreConnection) logError(errorGroup string, uid string, msg string, err error) {
+func (s *SignalrCoreMsgpack) logError(errorGroup string, uid string, msg string, err error) {
 	log.Printf("[Error][%s] %s due to %s", uid, msg, err)
 	if errorGroup != "" {
 		s.counter.Stat(errorGroup, 1)
 	}
 }
 
-func (s *SignalrCoreConnection) logLatency(latency int64) {
+func (s *SignalrCoreMsgpack) logLatency(latency int64) {
 	index := int(latency / 100)
 	if index >= 10 {
 		s.counter.Stat("message:gt:1000", 1)
@@ -47,7 +48,7 @@ func (s *SignalrCoreConnection) logLatency(latency int64) {
 	}
 }
 
-func (s *SignalrCoreConnection) Setup(config *Config) error {
+func (s *SignalrCoreMsgpack) Setup(config *Config) error {
 	s.host = config.Host
 
 	s.counter = util.NewCounter()
@@ -60,17 +61,42 @@ func (s *SignalrCoreConnection) Setup(config *Config) error {
 	return nil
 }
 
-func (s *SignalrCoreConnection) processLatency() {
+var numBitsToShift = []uint{0, 7, 14, 21, 28}
+
+func parseMessage(bytes []byte) ([]byte, error) {
+	moreBytes := true
+	msgLen := 0
+	numBytes := 0
+	for moreBytes && numBytes < len(bytes) {
+		byteRead := bytes[numBytes]
+		msgLen = msgLen | int(uint(byteRead&0x7F)<<numBitsToShift[numBytes])
+		numBytes++
+		moreBytes = (byteRead & 0x80) != 0
+	}
+
+	if msgLen+numBytes > len(bytes) {
+		return nil, fmt.Errorf("Not enough data in message, message length = %d, length section bytes = %d, data length = %d", msgLen, numBytes, len(bytes))
+	}
+
+	return bytes[numBytes : numBytes+msgLen], nil
+}
+
+func (s *SignalrCoreMsgpack) processLatency() {
 	for msgReceived := range s.received {
-		var content SignalRCoreInvocation
-		err := json.Unmarshal(msgReceived.Content[:len(msgReceived.Content)-1], &content)
+		msg, err := parseMessage(msgReceived.Content)
+		if err != nil {
+			s.logError("message:decode_error", msgReceived.ClientID, "Failed to parse incoming message", err)
+			continue
+		}
+		var content MsgpackInvocation
+		err = msgpack.Unmarshal(msg, &content)
 		if err != nil {
 			s.logError("message:decode_error", msgReceived.ClientID, "Failed to decode incoming message", err)
 			continue
 		}
 
-		if content.Type == 1 && content.Target == "echo" {
-			sendStart, err := strconv.ParseInt(content.Arguments[1], 10, 64)
+		if content.Target == "echo" {
+			sendStart, err := strconv.ParseInt(content.Params[1], 10, 64)
 			if err != nil {
 				s.logError("message:decode_error", msgReceived.ClientID, "Failed to decode start timestamp", err)
 				continue
@@ -80,11 +106,11 @@ func (s *SignalrCoreConnection) processLatency() {
 	}
 }
 
-func (s *SignalrCoreConnection) Counters() map[string]int64 {
+func (s *SignalrCoreMsgpack) Counters() map[string]int64 {
 	return s.counter.Snapshot()
 }
 
-func (s *SignalrCoreConnection) newSession() (session *Session, err error) {
+func (s *SignalrCoreMsgpack) newSession() (session *Session, err error) {
 	defer func() {
 		if err != nil {
 			s.counter.Stat("connection:inprogress", -1)
@@ -132,7 +158,7 @@ func (s *SignalrCoreConnection) newSession() (session *Session, err error) {
 	return
 }
 
-func (s *SignalrCoreConnection) DoEnsureConnection(count int, conPerSec int) error {
+func (s *SignalrCoreMsgpack) DoEnsureConnection(count int, conPerSec int) error {
 	if count < 0 {
 		return nil
 	}
@@ -156,7 +182,7 @@ func (s *SignalrCoreConnection) DoEnsureConnection(count int, conPerSec int) err
 					return err
 				}
 				session.Start()
-				session.WriteTextMessage("{\"protocol\":\"json\"}\x1e")
+				session.WriteTextMessage("{\"protocol\":\"messagepack\"}\x1e")
 				s.sessions = append(s.sessions, session)
 			}
 			diff -= nextBatch
@@ -176,7 +202,7 @@ func (s *SignalrCoreConnection) DoEnsureConnection(count int, conPerSec int) err
 	return nil
 }
 
-func (s *SignalrCoreConnection) DoSend(clients int, intervalMillis int) error {
+func (s *SignalrCoreMsgpack) DoSend(clients int, intervalMillis int) error {
 	s.sessionsLock.Lock()
 	defer s.sessionsLock.Unlock()
 
@@ -193,7 +219,7 @@ func (s *SignalrCoreConnection) DoSend(clients int, intervalMillis int) error {
 	for i := bound; i < sessionCount; i++ {
 		s.sessions[i].RemoveMessageGenerator()
 	}
-	messageGen := &SignalRCoreTextMessageGenerator{
+	messageGen := &MessagePackMessageGenerator{
 		WithInterval: WithInterval{
 			interval: time.Millisecond * time.Duration(intervalMillis),
 		},
@@ -205,14 +231,14 @@ func (s *SignalrCoreConnection) DoSend(clients int, intervalMillis int) error {
 	return nil
 }
 
-func (s *SignalrCoreConnection) DoStopSend() error {
+func (s *SignalrCoreMsgpack) DoStopSend() error {
 	s.sessionsLock.Lock()
 	defer s.sessionsLock.Unlock()
 
 	return s.doStopSendUnsafe()
 }
 
-func (s *SignalrCoreConnection) doStopSendUnsafe() error {
+func (s *SignalrCoreMsgpack) doStopSendUnsafe() error {
 	for _, session := range s.sessions {
 		session.RemoveMessageGenerator()
 	}
@@ -220,7 +246,7 @@ func (s *SignalrCoreConnection) doStopSendUnsafe() error {
 	return nil
 }
 
-func (s *SignalrCoreConnection) DoClear(prefix string) error {
+func (s *SignalrCoreMsgpack) DoClear(prefix string) error {
 	s.counter.Clear(prefix)
 	return nil
 }

@@ -60,6 +60,7 @@ func startAgent() {
 	if err != nil {
 		log.Fatal("Failed to listen on "+opts.ListenAddress, err)
 	}
+	log.Println("Listen on ", l.Addr())
 	http.Serve(l, nil)
 }
 

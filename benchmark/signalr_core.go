@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/vmihailenco/msgpack"
 )
 
 const SignalRMessageTerminator = '\x1e'
@@ -24,17 +25,55 @@ type SignalRCoreInvocation struct {
 	Arguments    []string `json:"arguments"`
 }
 
+type MsgpackInvocation struct {
+	MessageType  int32
+	InvocationID string
+	Target       string
+	Params       []string
+}
+
+func (m *MsgpackInvocation) EncodeMsgpack(enc *msgpack.Encoder) error {
+	enc.EncodeArrayLen(4)
+	return enc.Encode(m.MessageType, m.InvocationID, m.Target, m.Params)
+}
+
+func (m *MsgpackInvocation) DecodeMsgpack(dec *msgpack.Decoder) error {
+	dec.DecodeArrayLen()
+	messageType, err := dec.DecodeInt32()
+	if err != nil {
+		log.Printf("Failed to decode message %v\n", dec)
+		return err
+	}
+	m.MessageType = messageType
+	if messageType == 1 {
+		return dec.Decode(&m.InvocationID, &m.Target, &m.Params)
+	}
+	return nil
+}
+
+type WithUid struct {
+	uid string
+}
+
+func (w *WithUid) SetUid(uid string) {
+	w.uid = uid
+}
+
+type WithInterval struct {
+	interval time.Duration
+}
+
+func (w *WithInterval) Interval() time.Duration {
+	return w.interval
+}
+
 type SignalRCoreTextMessageGenerator struct {
-	uid          string
-	interval     time.Duration
 	invocationId int
+	WithInterval
+	WithUid
 }
 
 var _ MessageGenerator = (*SignalRCoreTextMessageGenerator)(nil)
-
-func (g *SignalRCoreTextMessageGenerator) Interval() time.Duration {
-	return g.interval
-}
 
 func (g *SignalRCoreTextMessageGenerator) Generate() Message {
 	g.invocationId++
@@ -56,6 +95,48 @@ func (g *SignalRCoreTextMessageGenerator) Generate() Message {
 	return PlainMessage{websocket.TextMessage, msg}
 }
 
-func (g *SignalRCoreTextMessageGenerator) SetUid(uid string) {
-	g.uid = uid
+type MessagePackMessageGenerator struct {
+	invocationId int
+	WithUid
+	WithInterval
+}
+
+var _ MessageGenerator = (*MessagePackMessageGenerator)(nil)
+
+func appendLength(bytes []byte) []byte {
+	buffer := make([]byte, 0, 5+len(bytes))
+	length := len(bytes)
+	for length > 0 {
+		current := byte(length & 0x7F)
+		length >>= 7
+		if length > 0 {
+			current |= 0x80
+		}
+		buffer = append(buffer, current)
+	}
+	if len(buffer) == 0 {
+		buffer = append(buffer, 0)
+	}
+	buffer = append(buffer, bytes...)
+	return buffer
+}
+
+func (g MessagePackMessageGenerator) Generate() Message {
+	g.invocationId++
+	invocation := MsgpackInvocation{
+		MessageType:  1,
+		InvocationID: strconv.Itoa(g.invocationId),
+		Target:       "echo",
+		Params: []string{
+			g.uid,
+			strconv.FormatInt(time.Now().UnixNano(), 10),
+		},
+	}
+	msg, err := msgpack.Marshal(&invocation)
+	if err != nil {
+		log.Fatalln("Fail to pack signalr core message", err)
+		return nil
+	}
+	msg = appendLength(msg)
+	return PlainMessage{websocket.BinaryMessage, msg}
 }

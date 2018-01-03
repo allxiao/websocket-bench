@@ -20,7 +20,7 @@ var opts struct {
 	ListenAddress string `short:"l" long:"listen-address" description:"Listen address" default:":7000"`
 	Agents        string `short:"a" long:"agents" description:"Agent addresses separated by comma"`
 	Server        string `short:"s" long:"server" description:"Websocket server host:port"`
-	Subject       string `long:"subject" description:"Test subject"`
+	Subject       string `short:"t" long:"test-subject" description:"Test subject"`
 }
 
 func startMaster() {

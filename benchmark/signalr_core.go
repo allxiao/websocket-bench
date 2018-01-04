@@ -51,14 +51,6 @@ func (m *MsgpackInvocation) DecodeMsgpack(dec *msgpack.Decoder) error {
 	return nil
 }
 
-type WithUid struct {
-	uid string
-}
-
-func (w *WithUid) SetUid(uid string) {
-	w.uid = uid
-}
-
 type WithInterval struct {
 	interval time.Duration
 }
@@ -70,19 +62,18 @@ func (w *WithInterval) Interval() time.Duration {
 type SignalRCoreTextMessageGenerator struct {
 	invocationId int
 	WithInterval
-	WithUid
 }
 
 var _ MessageGenerator = (*SignalRCoreTextMessageGenerator)(nil)
 
-func (g *SignalRCoreTextMessageGenerator) Generate() Message {
+func (g *SignalRCoreTextMessageGenerator) Generate(uid string) Message {
 	g.invocationId++
 	msg, err := json.Marshal(&SignalRCoreInvocation{
 		Type:         1,
 		InvocationId: strconv.Itoa(g.invocationId),
 		Target:       "echo",
 		Arguments: []string{
-			g.uid,
+			uid,
 			strconv.FormatInt(time.Now().UnixNano(), 10),
 		},
 		NonBlocking: false,
@@ -97,7 +88,6 @@ func (g *SignalRCoreTextMessageGenerator) Generate() Message {
 
 type MessagePackMessageGenerator struct {
 	invocationId int
-	WithUid
 	WithInterval
 }
 
@@ -121,14 +111,14 @@ func appendLength(bytes []byte) []byte {
 	return buffer
 }
 
-func (g MessagePackMessageGenerator) Generate() Message {
+func (g MessagePackMessageGenerator) Generate(uid string) Message {
 	g.invocationId++
 	invocation := MsgpackInvocation{
 		MessageType:  1,
 		InvocationID: strconv.Itoa(g.invocationId),
 		Target:       "echo",
 		Params: []string{
-			g.uid,
+			uid,
 			strconv.FormatInt(time.Now().UnixNano(), 10),
 		},
 	}

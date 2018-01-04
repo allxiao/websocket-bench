@@ -64,8 +64,7 @@ func (c CloseMessage) Bytes() []byte {
 
 type MessageGenerator interface {
 	Interval() time.Duration
-	Generate() Message
-	SetUid(uid string)
+	Generate(uid string) Message
 }
 
 // Session represents a single connection to the given websocket host.
@@ -79,9 +78,8 @@ type Session struct {
 
 	counter *util.Counter
 
-	genLock   sync.Mutex
-	genClose  chan struct{}
-	generator MessageGenerator
+	genLock  sync.Mutex
+	genClose chan struct{}
 }
 
 func NewSession(id string, received chan MessageReceived, counter *util.Counter, conn *websocket.Conn) *Session {
@@ -116,8 +114,6 @@ func (s *Session) InstallMessageGeneator(gen MessageGenerator) {
 
 	s.removeMessageGeneratorUnsafe()
 
-	s.generator = gen
-	s.generator.SetUid(s.ID)
 	s.genClose = make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(gen.Interval())
@@ -126,7 +122,7 @@ func (s *Session) InstallMessageGeneator(gen MessageGenerator) {
 		for {
 			select {
 			case <-ticker.C:
-				s.Sending <- gen.Generate()
+				s.Sending <- gen.Generate(s.ID)
 			case <-s.genClose:
 				return
 			}
@@ -148,8 +144,16 @@ func (s *Session) removeMessageGeneratorUnsafe() {
 	}
 }
 
+func (s *Session) sendMessage(msg Message) {
+	err := s.Conn.WriteMessage(msg.Type(), msg.Bytes())
+	s.counter.Stat("message:sent", 1)
+	if err != nil {
+		log.Println("Error sending message: ", err)
+		s.counter.Stat("message:send_error", 1)
+	}
+}
+
 func (s *Session) sendingWorker() {
-	defer close(s.Sending)
 	for {
 		select {
 		case control, ok := <-s.Control:
@@ -158,21 +162,15 @@ func (s *Session) sendingWorker() {
 			}
 			switch control {
 			case "close":
-				go func() {
-					// will block if we send in the same go routine as the enclosed select
-					// is checking the same channel
-					s.Sending <- CloseMessage{}
-				}()
+				s.sendMessage(CloseMessage{})
 			default:
 				log.Println("Received unhandled control message: ", control)
 			}
-		case msg := <-s.Sending:
-			err := s.Conn.WriteMessage(msg.Type(), msg.Bytes())
-			s.counter.Stat("message:sent", 1)
-			if err != nil {
-				log.Println("Error sending message: ", err)
-				s.counter.Stat("message:send_error", 1)
+		case msg, ok := <-s.Sending:
+			if !ok {
+				return
 			}
+			s.sendMessage(msg)
 		}
 	}
 }
@@ -182,7 +180,6 @@ func (s *Session) receivedWorker(id string) {
 	for {
 		_, msg, err := s.Conn.ReadMessage()
 		if err != nil {
-			close(s.Control)
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure) {
 				log.Println("Failed to read incoming message:", err)
 				s.counter.Stat("message:receive_error", 1)
@@ -204,5 +201,6 @@ func (s *Session) Close() {
 			log.Println(r)
 		}
 	}()
+	s.RemoveMessageGenerator()
 	s.Control <- "close"
 }

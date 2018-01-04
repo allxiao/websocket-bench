@@ -2,6 +2,7 @@ package benchmark
 
 import (
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -116,6 +117,8 @@ func (s *Session) InstallMessageGeneator(gen MessageGenerator) {
 
 	s.genClose = make(chan struct{})
 	go func() {
+		// randomize the start time of the generator
+		time.Sleep(time.Millisecond * time.Duration(rand.Int()%1000))
 		ticker := time.NewTicker(gen.Interval())
 		defer ticker.Stop()
 

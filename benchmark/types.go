@@ -159,20 +159,16 @@ func (s *Session) sendMessage(msg Message) {
 func (s *Session) sendingWorker() {
 	for {
 		select {
-		case control, ok := <-s.Control:
-			if !ok {
-				return
-			}
+		case control := <-s.Control:
 			switch control {
 			case "close":
+				s.counter.Stat("connection:closing", 1)
 				s.sendMessage(CloseMessage{})
+				return
 			default:
 				log.Println("Received unhandled control message: ", control)
 			}
-		case msg, ok := <-s.Sending:
-			if !ok {
-				return
-			}
+		case msg := <-s.Sending:
 			s.sendMessage(msg)
 		}
 	}
@@ -183,14 +179,16 @@ func (s *Session) receivedWorker(id string) {
 	for {
 		_, msg, err := s.Conn.ReadMessage()
 		if err != nil {
+			s.counter.Stat("connection:established", -1)
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure) {
 				log.Println("Failed to read incoming message:", err)
 				s.counter.Stat("message:receive_error", 1)
 				s.States <- "error"
+			} else {
+				s.counter.Stat("connection:closing", -1)
+				s.counter.Stat("connection:closed", 1)
+				s.States <- "closed"
 			}
-			s.counter.Stat("connection:established", -1)
-			s.counter.Stat("connection:closed", 1)
-			s.States <- "closed"
 			break
 		}
 		s.counter.Stat("message:received", 1)

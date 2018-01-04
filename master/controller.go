@@ -40,12 +40,12 @@ type Controller struct {
 }
 
 func (c *Controller) RegisterAgent(address string) error {
-	if proxy, err := NewAgentProxy(address); err == nil {
-		c.Agents = append(c.Agents, proxy)
-		return nil
-	} else {
+	proxy, err := NewAgentProxy(address)
+	if err != nil {
 		return err
 	}
+	c.Agents = append(c.Agents, proxy)
+	return nil
 }
 
 func (c *Controller) setupAgents(config *benchmark.Config) error {
@@ -124,6 +124,7 @@ func (c *Controller) Run(config *benchmark.Config) error {
 		if len(parts) < 1 {
 			continue
 		}
+		partsLen := len(parts)
 		switch parts[0] {
 		case "r":
 			fallthrough
@@ -132,7 +133,7 @@ func (c *Controller) Run(config *benchmark.Config) error {
 		case "c":
 			fallthrough
 		case "EnsureConnection":
-			if len(parts) < 2 || len(parts) > 3 {
+			if partsLen < 2 || partsLen > 3 {
 				fmt.Println("SYNTAX: c <connection_count> [connection_per_second]")
 				break
 			}
@@ -176,14 +177,22 @@ func (c *Controller) Run(config *benchmark.Config) error {
 		case "s":
 			fallthrough
 		case "Send":
-			if len(parts) != 3 {
-				fmt.Println("SYNTAX: s <clients> <interval_millis>")
+			if partsLen < 2 || partsLen > 3 {
+				fmt.Println("SYNTAX: s <clients> [interval_millis]")
 				break
 			}
 			clients, err := strconv.Atoi(parts[1])
 			if err != nil {
 				fmt.Println("ERROR: ", err)
 				break
+			}
+			interval := 1000
+			if partsLen >= 3 {
+				interval, err = strconv.Atoi(parts[2])
+				if err != nil {
+					fmt.Println("ERROR: ", err)
+					break
+				}
 			}
 			if clients < 0 {
 				clients = math.MaxInt32
@@ -192,7 +201,7 @@ func (c *Controller) Run(config *benchmark.Config) error {
 				agentClients := c.SplitNumber(clients, i)
 				err := agentProxy.Client.Call("Agent.Invoke", &agent.Invocation{
 					Command:   "Send",
-					Arguments: []string{strconv.Itoa(agentClients), parts[2]},
+					Arguments: []string{strconv.Itoa(agentClients), strconv.Itoa(interval)},
 				}, nil)
 				if err != nil {
 					fmt.Printf("ERROR[%s]: %v\n", agentProxy.Address, err)

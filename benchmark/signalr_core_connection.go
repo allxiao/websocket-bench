@@ -190,7 +190,7 @@ func (s *SignalrCoreConnection) DoSend(clients int, intervalMillis int) error {
 		bound = clients
 	}
 
-	for i := bound; i < sessionCount; i++ {
+	for i := sessionCount - bound - 1; i >= 0; i-- {
 		s.sessions[i].RemoveMessageGenerator()
 	}
 	messageGen := &SignalRCoreTextMessageGenerator{
@@ -198,7 +198,7 @@ func (s *SignalrCoreConnection) DoSend(clients int, intervalMillis int) error {
 			interval: time.Millisecond * time.Duration(intervalMillis),
 		},
 	}
-	for i := 0; i < bound; i++ {
+	for i := sessionCount - bound; i < sessionCount; i++ {
 		s.sessions[i].InstallMessageGeneator(messageGen)
 	}
 

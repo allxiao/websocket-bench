@@ -150,16 +150,19 @@ func (s *Session) removeMessageGeneratorUnsafe() {
 
 func (s *Session) sendingWorker() {
 	defer close(s.Sending)
-	ticker := time.NewTicker(time.Second)
 	for {
 		select {
-		case <-ticker.C:
-			continue
-		case control := <-s.Control:
+		case control, ok := <-s.Control:
+			if !ok {
+				return
+			}
 			switch control {
 			case "close":
-				s.Sending <- CloseMessage{}
-				return
+				go func() {
+					// will block if we send in the same go routine as the enclosed select
+					// is checking the same channel
+					s.Sending <- CloseMessage{}
+				}()
 			default:
 				log.Println("Received unhandled control message: ", control)
 			}
@@ -179,6 +182,7 @@ func (s *Session) receivedWorker(id string) {
 	for {
 		_, msg, err := s.Conn.ReadMessage()
 		if err != nil {
+			close(s.Control)
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure) {
 				log.Println("Failed to read incoming message:", err)
 				s.counter.Stat("message:receive_error", 1)

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ArieShout/websocket-bench/agent"
 	"github.com/ArieShout/websocket-bench/benchmark"
@@ -135,6 +136,20 @@ func formatCSVRecord(counters map[string]int64) string {
 	return strings.Join(values, ",")
 }
 
+func (c *Controller) doInvoke(command string, arguments ...string) error {
+	for _, agentProxy := range c.Agents {
+		err := agentProxy.Client.Call("Agent.Invoke", &agent.Invocation{
+			Command:   command,
+			Arguments: arguments,
+		}, nil)
+		if err != nil {
+			fmt.Printf("ERROR[%s] %s(%s): %v\n", agentProxy.Address, command, strings.Join(arguments, ","), err)
+		}
+	}
+
+	return nil
+}
+
 func (c *Controller) Run(config *benchmark.Config) error {
 	if err := c.setupAgents(config); err != nil {
 		return err
@@ -163,6 +178,9 @@ func (c *Controller) Run(config *benchmark.Config) error {
 		case "result":
 			c.printCounters(c.collectCounters())
 		case "v":
+			time.Sleep(5 * time.Second)
+			c.doInvoke("Clear", "message")
+			time.Sleep(10 * time.Second)
 			fmt.Println(csvHeader)
 			counters := c.collectCounters()
 			fmt.Println(formatCSVRecord(counters))

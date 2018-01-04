@@ -103,6 +103,38 @@ func (c *Controller) SplitNumber(total, index int) int {
 	return base
 }
 
+var csvHeader string
+var counterFields = []string{
+	"connection:inprogress",
+	"connection:established",
+	"connection:closed",
+	"connection:error",
+	"message:lt:100",
+	"message:lt:200",
+	"message:lt:300",
+	"message:lt:400",
+	"message:lt:500",
+	"message:lt:600",
+	"message:lt:700",
+	"message:lt:800",
+	"message:lt:900",
+	"message:lt:1000",
+	"message:gt:1000",
+	"message:sent",
+	"message:received",
+	"message:send_error",
+	"message:receive_error",
+	"message:decode_error",
+}
+
+func formatCSVRecord(counters map[string]int64) string {
+	values := make([]string, len(counterFields))
+	for i, field := range counterFields {
+		values[i] = strconv.FormatInt(counters[field], 10)
+	}
+	return strings.Join(values, ",")
+}
+
 func (c *Controller) Run(config *benchmark.Config) error {
 	if err := c.setupAgents(config); err != nil {
 		return err
@@ -130,6 +162,10 @@ func (c *Controller) Run(config *benchmark.Config) error {
 			fallthrough
 		case "result":
 			c.printCounters(c.collectCounters())
+		case "v":
+			fmt.Println(csvHeader)
+			counters := c.collectCounters()
+			fmt.Println(formatCSVRecord(counters))
 		case "c":
 			fallthrough
 		case "EnsureConnection":
@@ -221,4 +257,13 @@ func (c *Controller) Run(config *benchmark.Config) error {
 	}
 
 	return nil
+}
+
+func init() {
+	headers := make([]string, len(counterFields))
+	for i, field := range counterFields {
+		parts := strings.SplitN(field, ":", 2)
+		headers[i] = parts[1]
+	}
+	csvHeader = strings.Join(headers, ",")
 }

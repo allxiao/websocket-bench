@@ -178,7 +178,6 @@ func (c *Controller) Run(config *benchmark.Config) error {
 		case "result":
 			c.printCounters(c.collectCounters())
 		case "v":
-			time.Sleep(5 * time.Second)
 			c.doInvoke("Clear", "message")
 			time.Sleep(10 * time.Second)
 			fmt.Println(csvHeader)

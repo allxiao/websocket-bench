@@ -14,6 +14,7 @@ import (
 var SubjectMap = map[string]benchmark.Subject{
 	"signalr:json:echo":    &benchmark.SignalrCoreConnection{},
 	"signalr:msgpack:echo": &benchmark.SignalrCoreMsgpack{},
+	"signalr:service:echo": &benchmark.SignalrServiceEcho{},
 }
 
 // Controller stands for a single agent and exposes management interfaces.

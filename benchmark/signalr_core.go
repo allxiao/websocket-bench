@@ -32,6 +32,10 @@ type MsgpackInvocation struct {
 	Params       []string
 }
 
+type SessionBuilder interface {
+	NewSession() (*Session, error)
+}
+
 func (m *MsgpackInvocation) EncodeMsgpack(enc *msgpack.Encoder) error {
 	enc.EncodeArrayLen(4)
 	return enc.Encode(m.MessageType, m.InvocationID, m.Target, m.Params)

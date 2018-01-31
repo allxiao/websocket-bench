@@ -110,7 +110,7 @@ func (s *SignalrCoreMsgpack) Counters() map[string]int64 {
 	return s.counter.Snapshot()
 }
 
-func (s *SignalrCoreMsgpack) newSession() (session *Session, err error) {
+func (s *SignalrCoreMsgpack) NewSession() (session *Session, err error) {
 	defer func() {
 		if err != nil {
 			s.counter.Stat("connection:inprogress", -1)
@@ -177,7 +177,7 @@ func (s *SignalrCoreMsgpack) DoEnsureConnection(count int, conPerSec int) error 
 			}
 			log.Printf("Spawn %d clients, current clients count %d", nextBatch, len(s.sessions))
 			for i := 0; i < nextBatch; i++ {
-				session, err := s.newSession()
+				session, err := SessionBuilder(s).NewSession()
 				if err != nil {
 					return err
 				}

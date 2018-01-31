@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -14,9 +15,9 @@ import (
 	"github.com/teris-io/shortid"
 )
 
-var _ Subject = (*SignalrCoreConnection)(nil)
+var _ Subject = (*SignalrServiceEcho)(nil)
 
-type SignalrCoreConnection struct {
+type SignalrServiceEcho struct {
 	host string
 
 	counter *util.Counter
@@ -27,18 +28,25 @@ type SignalrCoreConnection struct {
 	received chan MessageReceived
 }
 
-func (s *SignalrCoreConnection) Name() string {
-	return "SignalR Core Connection"
+type SignalrServiceHandshake struct {
+	ServiceUrl string `json:"serviceUrl"`
+	JwtBearer  string `json:"jwtBearer"`
 }
 
-func (s *SignalrCoreConnection) logError(errorGroup string, uid string, msg string, err error) {
+var httpPrefix = regexp.MustCompile("^https?://")
+
+func (s *SignalrServiceEcho) Name() string {
+	return "SignalR Service Echo"
+}
+
+func (s *SignalrServiceEcho) logError(errorGroup string, uid string, msg string, err error) {
 	log.Printf("[Error][%s] %s due to %s", uid, msg, err)
 	if errorGroup != "" {
 		s.counter.Stat(errorGroup, 1)
 	}
 }
 
-func (s *SignalrCoreConnection) logLatency(latency int64) {
+func (s *SignalrServiceEcho) logLatency(latency int64) {
 	index := int(latency / 100)
 	if index >= 10 {
 		s.counter.Stat("message:gt:1000", 1)
@@ -47,7 +55,7 @@ func (s *SignalrCoreConnection) logLatency(latency int64) {
 	}
 }
 
-func (s *SignalrCoreConnection) Setup(config *Config) error {
+func (s *SignalrServiceEcho) Setup(config *Config) error {
 	s.host = config.Host
 
 	s.counter = util.NewCounter()
@@ -60,7 +68,7 @@ func (s *SignalrCoreConnection) Setup(config *Config) error {
 	return nil
 }
 
-func (s *SignalrCoreConnection) processLatency() {
+func (s *SignalrServiceEcho) processLatency() {
 	for msgReceived := range s.received {
 		var content SignalRCoreInvocation
 		err := json.Unmarshal(msgReceived.Content[:len(msgReceived.Content)-1], &content)
@@ -80,11 +88,11 @@ func (s *SignalrCoreConnection) processLatency() {
 	}
 }
 
-func (s *SignalrCoreConnection) Counters() map[string]int64 {
+func (s *SignalrServiceEcho) Counters() map[string]int64 {
 	return s.counter.Snapshot()
 }
 
-func (s *SignalrCoreConnection) NewSession() (session *Session, err error) {
+func (s *SignalrServiceEcho) NewSession() (session *Session, err error) {
 	defer func() {
 		if err != nil {
 			s.counter.Stat("connection:inprogress", -1)
@@ -92,14 +100,15 @@ func (s *SignalrCoreConnection) NewSession() (session *Session, err error) {
 		}
 	}()
 
+	s.counter.Stat("connection:inprogress", 1)
+
 	id, err := shortid.Generate()
 	if err != nil {
 		log.Println("ERROR: failed to generate uid due to", err)
 		return
 	}
 
-	s.counter.Stat("connection:inprogress", 1)
-	negotiateResponse, err := http.Post("http://"+s.host+"/chat/negotiate", "text/plain;charset=UTF-8", nil)
+	negotiateResponse, err := http.Get("http://" + s.host + "/chat")
 	if err != nil {
 		s.logError("connection:error", id, "Failed to negotiate with the server", err)
 		return
@@ -107,18 +116,20 @@ func (s *SignalrCoreConnection) NewSession() (session *Session, err error) {
 	defer negotiateResponse.Body.Close()
 
 	decoder := json.NewDecoder(negotiateResponse.Body)
-	var handshakeContent SignalRCoreHandshakeResp
-	err = decoder.Decode(&handshakeContent)
+	var handshake SignalrServiceHandshake
+	err = decoder.Decode(&handshake)
 	if err != nil {
-		s.logError("connection:error", id, "Failed to decode connection id", err)
+		s.logError("connection:error", id, "Failed to decode service URL and jwtBearer", err)
 		return
 	}
 
-	wsURL := "ws://" + s.host + "/chat?id=" + handshakeContent.ConnectionId
+	baseURL := httpPrefix.ReplaceAllString(handshake.ServiceUrl, "ws://")
+	wsURL := baseURL + "?uid=" + id + "&signalRTokenHeader=" + handshake.JwtBearer
+
 	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		s.logError("connection:error", id, "Failed to connect to websocket", err)
-		return nil, err
+		return
 	}
 
 	session = NewSession(id, s.received, s.counter, c)
@@ -132,7 +143,7 @@ func (s *SignalrCoreConnection) NewSession() (session *Session, err error) {
 	return
 }
 
-func (s *SignalrCoreConnection) DoEnsureConnection(count int, conPerSec int) error {
+func (s *SignalrServiceEcho) DoEnsureConnection(count int, conPerSec int) error {
 	if count < 0 {
 		return nil
 	}
@@ -175,7 +186,7 @@ func (s *SignalrCoreConnection) DoEnsureConnection(count int, conPerSec int) err
 	return nil
 }
 
-func (s *SignalrCoreConnection) DoSend(clients int, intervalMillis int) error {
+func (s *SignalrServiceEcho) DoSend(clients int, intervalMillis int) error {
 	s.sessionsLock.Lock()
 	defer s.sessionsLock.Unlock()
 
@@ -204,14 +215,14 @@ func (s *SignalrCoreConnection) DoSend(clients int, intervalMillis int) error {
 	return nil
 }
 
-func (s *SignalrCoreConnection) DoStopSend() error {
+func (s *SignalrServiceEcho) DoStopSend() error {
 	s.sessionsLock.Lock()
 	defer s.sessionsLock.Unlock()
 
 	return s.doStopSendUnsafe()
 }
 
-func (s *SignalrCoreConnection) doStopSendUnsafe() error {
+func (s *SignalrServiceEcho) doStopSendUnsafe() error {
 	for _, session := range s.sessions {
 		session.RemoveMessageGenerator()
 	}
@@ -219,7 +230,7 @@ func (s *SignalrCoreConnection) doStopSendUnsafe() error {
 	return nil
 }
 
-func (s *SignalrCoreConnection) DoClear(prefix string) error {
+func (s *SignalrServiceEcho) DoClear(prefix string) error {
 	s.counter.Clear(prefix)
 	return nil
 }

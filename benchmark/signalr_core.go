@@ -60,17 +60,15 @@ func (w *WithInterval) Interval() time.Duration {
 }
 
 type SignalRCoreTextMessageGenerator struct {
-	invocationId int
 	WithInterval
 }
 
 var _ MessageGenerator = (*SignalRCoreTextMessageGenerator)(nil)
 
-func (g *SignalRCoreTextMessageGenerator) Generate(uid string) Message {
-	g.invocationId++
+func (g *SignalRCoreTextMessageGenerator) Generate(uid string, invocationId int64) Message {
 	msg, err := json.Marshal(&SignalRCoreInvocation{
 		Type:         1,
-		InvocationId: strconv.Itoa(g.invocationId),
+		InvocationId: strconv.FormatInt(invocationId, 10),
 		Target:       "echo",
 		Arguments: []string{
 			uid,
@@ -87,7 +85,6 @@ func (g *SignalRCoreTextMessageGenerator) Generate(uid string) Message {
 }
 
 type MessagePackMessageGenerator struct {
-	invocationId int
 	WithInterval
 }
 
@@ -111,11 +108,10 @@ func appendLength(bytes []byte) []byte {
 	return buffer
 }
 
-func (g MessagePackMessageGenerator) Generate(uid string) Message {
-	g.invocationId++
+func (g MessagePackMessageGenerator) Generate(uid string, invocationId int64) Message {
 	invocation := MsgpackInvocation{
 		MessageType:  1,
-		InvocationID: strconv.Itoa(g.invocationId),
+		InvocationID: strconv.FormatInt(invocationId, 10),
 		Target:       "echo",
 		Params: []string{
 			uid,

@@ -65,7 +65,7 @@ func (c CloseMessage) Bytes() []byte {
 
 type MessageGenerator interface {
 	Interval() time.Duration
-	Generate(uid string) Message
+	Generate(uid string, invocationId int64) Message
 }
 
 // Session represents a single connection to the given websocket host.
@@ -76,6 +76,8 @@ type Session struct {
 	Sending  chan Message
 	received chan MessageReceived
 	States   chan string
+
+	invocationId int64
 
 	counter *util.Counter
 
@@ -125,7 +127,8 @@ func (s *Session) InstallMessageGeneator(gen MessageGenerator) {
 		for {
 			select {
 			case <-ticker.C:
-				s.Sending <- gen.Generate(s.ID)
+				s.Sending <- gen.Generate(s.ID, s.invocationId)
+				s.invocationId++
 			case <-s.genClose:
 				return
 			}

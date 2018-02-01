@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -200,16 +201,16 @@ func (s *SignalrServiceEcho) DoSend(clients int, intervalMillis int) error {
 		bound = clients
 	}
 
-	for i := sessionCount - bound - 1; i >= 0; i-- {
-		s.sessions[i].RemoveMessageGenerator()
-	}
+	s.doStopSendUnsafe()
+	
 	messageGen := &SignalRCoreTextMessageGenerator{
 		WithInterval: WithInterval{
 			interval: time.Millisecond * time.Duration(intervalMillis),
 		},
 	}
-	for i := sessionCount - bound; i < sessionCount; i++ {
-		s.sessions[i].InstallMessageGeneator(messageGen)
+	indices := rand.Perm(len(s.sessions))
+	for i := 0; i < bound; i++ {
+		s.sessions[indices[i]].InstallMessageGeneator(messageGen)
 	}
 
 	return nil

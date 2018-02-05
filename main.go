@@ -47,9 +47,8 @@ func startMaster() {
 	}
 
 	c.Run(&benchmark.Config{
-		Host:                opts.Server,
-		Subject:             opts.Subject,
-		ConnectionPerSecond: 100,
+		Host:    opts.Server,
+		Subject: opts.Subject,
 	})
 }
 

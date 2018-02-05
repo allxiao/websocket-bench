@@ -10,64 +10,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Config defines the basic configuration for the benchmark.
-type Config struct {
-	Host    string
-	Subject string
-
-	ConnectionPerSecond int
-}
-
-// Subject defines the interface for a test subject.
-type Subject interface {
-	Name() string
-	Setup(config *Config) error
-	Counters() map[string]int64
-
-	DoEnsureConnection(count int, conPerSec int) error
-	DoSend(clients int, intervalMillis int) error
-	DoClear(prefix string) error
-}
-
-type Message interface {
-	Type() int
-	Bytes() []byte
-}
-
-type MessageReceived struct {
-	ClientID string
-	Content  []byte
-}
-
-type PlainMessage struct {
-	tpe          int
-	messageBytes []byte
-}
-
-func (msg PlainMessage) Type() int {
-	return msg.tpe
-}
-
-func (msg PlainMessage) Bytes() []byte {
-	return msg.messageBytes
-}
-
-type CloseMessage struct {
-}
-
-func (c CloseMessage) Type() int {
-	return websocket.CloseMessage
-}
-
-func (c CloseMessage) Bytes() []byte {
-	return websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")
-}
-
-type MessageGenerator interface {
-	Interval() time.Duration
-	Generate(uid string, invocationId int64) Message
-}
-
 // Session represents a single connection to the given websocket host.
 type Session struct {
 	ID       string

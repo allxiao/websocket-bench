@@ -120,5 +120,6 @@ func (s *WithSessions) DoSend(clients int, intervalMillis int) error {
 		WithInterval: WithInterval{
 			interval: time.Millisecond * time.Duration(intervalMillis),
 		},
+		Target: "echo",
 	})
 }

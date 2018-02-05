@@ -32,10 +32,6 @@ type MsgpackInvocation struct {
 	Params       []string
 }
 
-type SessionBuilder interface {
-	NewSession() (*Session, error)
-}
-
 func (m *MsgpackInvocation) EncodeMsgpack(enc *msgpack.Encoder) error {
 	enc.EncodeArrayLen(4)
 	return enc.Encode(m.MessageType, m.InvocationID, m.Target, m.Params)
@@ -65,6 +61,7 @@ func (w *WithInterval) Interval() time.Duration {
 
 type SignalRCoreTextMessageGenerator struct {
 	WithInterval
+	Target string
 }
 
 var _ MessageGenerator = (*SignalRCoreTextMessageGenerator)(nil)
@@ -73,7 +70,7 @@ func (g *SignalRCoreTextMessageGenerator) Generate(uid string, invocationId int6
 	msg, err := json.Marshal(&SignalRCoreInvocation{
 		Type:         1,
 		InvocationId: strconv.FormatInt(invocationId, 10),
-		Target:       "echo",
+		Target:       g.Target,
 		Arguments: []string{
 			uid,
 			strconv.FormatInt(time.Now().UnixNano(), 10),

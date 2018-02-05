@@ -12,9 +12,10 @@ import (
 
 // SubjectMap defines the mapping from a string name to the given testing subject implementation.
 var SubjectMap = map[string]benchmark.Subject{
-	"signalr:json:echo":    &benchmark.SignalrCoreConnection{},
-	"signalr:msgpack:echo": &benchmark.SignalrCoreMsgpack{},
-	"signalr:service:echo": &benchmark.SignalrServiceEcho{},
+	"signalr:json:echo":         &benchmark.SignalrCoreConnection{},
+	"signalr:msgpack:echo":      &benchmark.SignalrCoreMsgpack{},
+	"signalr:service:echo":      &benchmark.SignalrServiceEcho{},
+	"signalr:service:broadcast": &benchmark.SignalrServiceBroadcast{},
 }
 
 // Controller stands for a single agent and exposes management interfaces.

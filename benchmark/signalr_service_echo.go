@@ -40,12 +40,12 @@ func (s *SignalrServiceEcho) Setup(config *Config) error {
 
 	s.received = make(chan MessageReceived)
 
-	go s.processLatency()
+	go s.processLatency("echo")
 
 	return nil
 }
 
-func (s *SignalrServiceEcho) processLatency() {
+func (s *SignalrServiceEcho) processLatency(target string) {
 	for msgReceived := range s.received {
 		var content SignalRCoreInvocation
 		err := json.Unmarshal(msgReceived.Content[:len(msgReceived.Content)-1], &content)
@@ -54,7 +54,7 @@ func (s *SignalrServiceEcho) processLatency() {
 			continue
 		}
 
-		if content.Type == 1 && content.Target == "echo" {
+		if content.Type == 1 && content.Target == target {
 			sendStart, err := strconv.ParseInt(content.Arguments[1], 10, 64)
 			if err != nil {
 				s.LogError("message:decode_error", msgReceived.ClientID, "Failed to decode start timestamp", err)
@@ -130,5 +130,6 @@ func (s *SignalrServiceEcho) DoSend(clients int, intervalMillis int) error {
 		WithInterval: WithInterval{
 			interval: time.Millisecond * time.Duration(intervalMillis),
 		},
+		Target: "broadcastMessage",
 	})
 }

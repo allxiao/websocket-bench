@@ -3,6 +3,7 @@ package benchmark
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -113,9 +114,7 @@ func (s *WithSessions) doSend(clients int, intervalMillis int, gen MessageGenera
 	s.sessionsLock.Lock()
 	defer s.sessionsLock.Unlock()
 
-	if clients <= 0 {
-		s.doStopSendUnsafe()
-	}
+	s.doStopSendUnsafe()
 
 	sessionCount := len(s.sessions)
 	bound := sessionCount
@@ -123,11 +122,9 @@ func (s *WithSessions) doSend(clients int, intervalMillis int, gen MessageGenera
 		bound = clients
 	}
 
-	for i := sessionCount - bound - 1; i >= 0; i-- {
-		s.sessions[i].RemoveMessageGenerator()
-	}
-	for i := sessionCount - bound; i < sessionCount; i++ {
-		s.sessions[i].InstallMessageGeneator(gen)
+	indices := rand.Perm(sessionCount)
+	for i := 0; i < bound; i++ {
+		s.sessions[indices[i]].InstallMessageGeneator(gen)
 	}
 
 	return nil

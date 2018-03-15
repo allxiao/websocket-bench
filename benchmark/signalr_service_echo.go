@@ -130,6 +130,6 @@ func (s *SignalrServiceEcho) DoSend(clients int, intervalMillis int) error {
 		WithInterval: WithInterval{
 			interval: time.Millisecond * time.Duration(intervalMillis),
 		},
-		Target: "broadcastMessage",
+		Target: "echo",
 	})
 }

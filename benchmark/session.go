@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ArieShout/websocket-bench/util"
+	"aspnet.com/util"
 	"github.com/gorilla/websocket"
 )
 
@@ -95,6 +95,7 @@ func (s *Session) removeMessageGeneratorUnsafe() {
 func (s *Session) sendMessage(msg Message) {
 	err := s.Conn.WriteMessage(msg.Type(), msg.Bytes())
 	s.counter.Stat("message:sent", 1)
+	s.counter.Stat("message:sendSize", int64(len(msg.Bytes())))
 	if err != nil {
 		log.Println("Error sending message: ", err)
 		s.counter.Stat("message:send_error", 1)
@@ -137,6 +138,7 @@ func (s *Session) receivedWorker(id string) {
 			break
 		}
 		s.counter.Stat("message:received", 1)
+		s.counter.Stat("message:recvSize", int64(len(msg)))
 		s.received <- MessageReceived{id, msg}
 	}
 }

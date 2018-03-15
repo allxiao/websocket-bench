@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ArieShout/websocket-bench/agent"
-	"github.com/ArieShout/websocket-bench/benchmark"
-	"github.com/ArieShout/websocket-bench/master"
+	"aspnet.com/agent"
+	"aspnet.com/benchmark"
+	"aspnet.com/master"
 	flags "github.com/jessevdk/go-flags"
 )
 
@@ -21,6 +21,7 @@ var opts struct {
 	Agents        string `short:"a" long:"agents" description:"Agent addresses separated by comma"`
 	Server        string `short:"s" long:"server" description:"Websocket server host:port"`
 	Subject       string `short:"t" long:"test-subject" description:"Test subject"`
+	CmdFile       string `short:"c" long:"cmd-file" description:"Command file"`
 }
 
 func startMaster() {
@@ -49,6 +50,8 @@ func startMaster() {
 	c.Run(&benchmark.Config{
 		Host:    opts.Server,
 		Subject: opts.Subject,
+		CmdFile: opts.CmdFile,
+		OutDir:  opts.OutputDir,
 	})
 }
 

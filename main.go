@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -55,6 +56,19 @@ func startMaster() {
 	})
 }
 
+func genPidFile(pidfile string) {
+        f, _ := os.Create(pidfile)
+        defer func() {
+		cerr := f.Close()
+		if cerr != nil {
+			log.Fatalln("Failed to close the pid file: ", cerr)
+		}
+	}()
+        _, err := f.WriteString(fmt.Sprintf("%d", os.Getpid()))
+        if err != nil {
+                log.Println("Fail to write pidfile")
+        }
+}
 func startAgent() {
 	rpc.RegisterName("Agent", new(agent.Controller))
 	rpc.HandleHTTP()
@@ -63,6 +77,7 @@ func startAgent() {
 		log.Fatal("Failed to listen on "+opts.ListenAddress, err)
 	}
 	log.Println("Listen on ", l.Addr())
+	genPidFile("/tmp/websocket-bench.pid")
 	http.Serve(l, nil)
 }
 

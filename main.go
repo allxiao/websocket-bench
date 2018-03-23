@@ -40,6 +40,8 @@ func startMaster() {
 		log.Fatalln("Subject was not specified")
 	}
 
+	genPidFile("/tmp/websocket-bench-master.pid")
+
 	c := &master.Controller{}
 
 	for _, address := range agentAddresses {

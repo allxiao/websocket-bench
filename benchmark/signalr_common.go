@@ -53,7 +53,7 @@ func (s *SignalrCoreCommon) SignalrCoreBaseConnect(protocol string) (session *Se
 		s.counter.Stat("connection:established", 1)
 
 		session.Start()
-		session.WriteTextMessage("{\"protocol\":\"" + protocol + "\"}\x1e")
+		session.WriteTextMessage("{\"protocol\":\"" + protocol + "\",\"version\":1}\x1e")
 		return
 	}
 
@@ -137,7 +137,7 @@ func (s *SignalrCoreCommon) ParseBinaryMessage(bytes []byte) ([]byte, error) {
 	moreBytes := true
 	msgLen := 0
 	numBytes := 0
-	for moreBytes && numBytes < len(bytes) {
+	for moreBytes && numBytes < len(bytes) && numBytes < 5 {
 		byteRead := bytes[numBytes]
 		msgLen = msgLen | int(uint(byteRead&0x7F)<<numBitsToShift[numBytes])
 		numBytes++
@@ -150,6 +150,7 @@ func (s *SignalrCoreCommon) ParseBinaryMessage(bytes []byte) ([]byte, error) {
 
 	return bytes[numBytes : numBytes+msgLen], nil
 }
+
 
 func (s *SignalrCoreCommon) ProcessJsonLatency(target string) {
 	for msgReceived := range s.received {

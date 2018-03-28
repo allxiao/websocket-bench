@@ -53,7 +53,7 @@ func (s *SignalrCoreCommon) SignalrCoreBaseConnect(protocol string) (session *Se
 		s.counter.Stat("connection:established", 1)
 
 		session.Start()
-		session.WriteTextMessage("{\"protocol\":\"" + protocol + "\",\"version\":1}\x1e")
+		session.NegotiateProtocol(protocol)
 		return
 	}
 
@@ -115,7 +115,7 @@ func (s *SignalrCoreCommon) SignalrServiceBaseConnect(protocol string) (session 
 		s.counter.Stat("connection:established", 1)
 
 		session.Start()
-		session.WriteTextMessage("{\"protocol\":\"" + protocol + "\"}\x1e")
+		session.NegotiateProtocol(protocol)
 		return
 	}
 
@@ -137,6 +137,7 @@ func (s *SignalrCoreCommon) ParseBinaryMessage(bytes []byte) ([]byte, error) {
 	moreBytes := true
 	msgLen := 0
 	numBytes := 0
+	//fmt.Printf("%x %x\n", bytes[0], bytes[1])
 	for moreBytes && numBytes < len(bytes) && numBytes < 5 {
 		byteRead := bytes[numBytes]
 		msgLen = msgLen | int(uint(byteRead&0x7F)<<numBitsToShift[numBytes])

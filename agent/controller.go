@@ -7,15 +7,21 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ArieShout/websocket-bench/benchmark"
+	"aspnet.com/benchmark"
 )
 
 // SubjectMap defines the mapping from a string name to the given testing subject implementation.
 var SubjectMap = map[string]benchmark.Subject{
-	"signalr:json:echo":         &benchmark.SignalrCoreConnection{},
-	"signalr:msgpack:echo":      &benchmark.SignalrCoreMsgpack{},
-	"signalr:service:echo":      &benchmark.SignalrServiceEcho{},
-	"signalr:service:broadcast": &benchmark.SignalrServiceBroadcast{},
+	// signalr core
+	"signalr:json:echo":         &benchmark.SignalrCoreJsonEcho{},
+	"signalr:json:broadcast":    &benchmark.SignalrCoreJsonBroadcast{},
+	"signalr:msgpack:echo":      &benchmark.SignalrCoreMsgpackEcho{},
+	"signalr:msgpack:broadcast": &benchmark.SignalrCoreMsgpackBroadcast{},
+	// signalr service
+	"signalr:service:json:echo":         &benchmark.SignalrServiceJsonEcho{},
+	"signalr:service:msgpack:echo":      &benchmark.SignalrServiceMsgpackEcho{},
+	"signalr:service:json:broadcast":    &benchmark.SignalrServiceJsonBroadcast{},
+	"signalr:service:msgpack:broadcast": &benchmark.SignalrServiceMsgpackBroadcast{},
 }
 
 // Controller stands for a single agent and exposes management interfaces.

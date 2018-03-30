@@ -7,13 +7,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ArieShout/websocket-bench/util"
+	"aspnet.com/util"
 )
 
 // Config defines the basic configuration for the benchmark.
 type Config struct {
 	Host    string
 	Subject string
+	CmdFile string
+	OutDir  string
 }
 
 // Subject defines the interface for a test subject.
@@ -45,7 +47,7 @@ func (w *WithCounter) LogError(errorGroup string, uid string, msg string, err er
 func (w *WithCounter) LogLatency(latency int64) {
 	index := int(latency / 100)
 	if index >= 10 {
-		w.Counter().Stat("message:gt:1000", 1)
+		w.Counter().Stat("message:ge:1000", 1)
 	} else {
 		w.Counter().Stat(fmt.Sprintf("message:lt:%d00", index+1), 1)
 	}

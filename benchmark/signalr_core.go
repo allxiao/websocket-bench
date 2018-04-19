@@ -17,16 +17,20 @@ type SignalRCoreHandshakeResp struct {
 	ConnectionId        string   `json:"connectionId"`
 }
 
+type SignalRCommon struct {
+	Type         int      `json:"type"`
+}
+
 type SignalRCoreInvocation struct {
 	InvocationId string   `json:"invocationId"`
 	Type         int      `json:"type"`
 	Target       string   `json:"target"`
-	NonBlocking  bool     `json:"nonBlocking"`
 	Arguments    []string `json:"arguments"`
 }
 
 type MsgpackInvocation struct {
 	MessageType  int32
+	Header	     map[string]string
 	InvocationID string
 	Target       string
 	Params       []string
@@ -34,7 +38,7 @@ type MsgpackInvocation struct {
 
 func (m *MsgpackInvocation) EncodeMsgpack(enc *msgpack.Encoder) error {
 	enc.EncodeArrayLen(4)
-	return enc.Encode(m.MessageType, m.InvocationID, m.Target, m.Params)
+	return enc.Encode(m.MessageType, m.Header, m.InvocationID, m.Target, m.Params)
 }
 
 func (m *MsgpackInvocation) DecodeMsgpack(dec *msgpack.Decoder) error {
@@ -46,7 +50,7 @@ func (m *MsgpackInvocation) DecodeMsgpack(dec *msgpack.Decoder) error {
 	}
 	m.MessageType = messageType
 	if messageType == 1 {
-		return dec.Decode(&m.InvocationID, &m.Target, &m.Params)
+		return dec.Decode(&m.Header, &m.InvocationID, &m.Target, &m.Params)
 	}
 	return nil
 }
@@ -69,13 +73,12 @@ var _ MessageGenerator = (*SignalRCoreTextMessageGenerator)(nil)
 func (g *SignalRCoreTextMessageGenerator) Generate(uid string, invocationId int64) Message {
 	msg, err := json.Marshal(&SignalRCoreInvocation{
 		Type:         1,
-		InvocationId: strconv.FormatInt(invocationId, 10),
+		//InvocationId: strconv.FormatInt(invocationId, 10),
 		Target:       g.Target,
 		Arguments: []string{
 			uid,
 			strconv.FormatInt(time.Now().UnixNano(), 10),
 		},
-		NonBlocking: false,
 	})
 	if err != nil {
 		log.Println("ERROR: failed to encoding SignalR message", err)
@@ -87,6 +90,7 @@ func (g *SignalRCoreTextMessageGenerator) Generate(uid string, invocationId int6
 
 type MessagePackMessageGenerator struct {
 	WithInterval
+	Target string
 }
 
 var _ MessageGenerator = (*MessagePackMessageGenerator)(nil)
@@ -112,8 +116,9 @@ func appendLength(bytes []byte) []byte {
 func (g MessagePackMessageGenerator) Generate(uid string, invocationId int64) Message {
 	invocation := MsgpackInvocation{
 		MessageType:  1,
-		InvocationID: strconv.FormatInt(invocationId, 10),
-		Target:       "echo",
+		Header: map[string]string{},
+		//InvocationID: nil, //strconv.FormatInt(invocationId, 10),
+		Target:       g.Target,
 		Params: []string{
 			uid,
 			strconv.FormatInt(time.Now().UnixNano(), 10),

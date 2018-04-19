@@ -1,12 +1,14 @@
 package benchmark
 
 import (
+	"bytes"
+	"fmt"
 	"log"
 	"math/rand"
 	"sync"
 	"time"
 
-	"github.com/ArieShout/websocket-bench/util"
+	"aspnet.com/util"
 	"github.com/gorilla/websocket"
 )
 
@@ -18,7 +20,7 @@ type Session struct {
 	Sending  chan Message
 	received chan MessageReceived
 	States   chan string
-
+	recvHandShake bool
 	invocationId int64
 
 	counter *util.Counter
@@ -37,13 +39,18 @@ func NewSession(id string, received chan MessageReceived, counter *util.Counter,
 	s.received = received
 	s.States = make(chan string)
 	s.genLock = sync.Mutex{}
-
+	s.recvHandShake = false
 	return s
 }
 
 func (s *Session) Start() {
 	go s.sendingWorker()
 	go s.receivedWorker(s.ID)
+}
+
+func (s *Session) NegotiateProtocol(protocol string) {
+	s.WriteTextMessage("{\"protocol\":\"" + protocol + "\",\"version\":1}\x1e")
+	s.recvHandShake = false
 }
 
 func (s *Session) WriteTextMessage(msg string) {
@@ -95,6 +102,7 @@ func (s *Session) removeMessageGeneratorUnsafe() {
 func (s *Session) sendMessage(msg Message) {
 	err := s.Conn.WriteMessage(msg.Type(), msg.Bytes())
 	s.counter.Stat("message:sent", 1)
+	s.counter.Stat("message:sendSize", int64(len(msg.Bytes())))
 	if err != nil {
 		log.Println("Error sending message: ", err)
 		s.counter.Stat("message:send_error", 1)
@@ -137,7 +145,18 @@ func (s *Session) receivedWorker(id string) {
 			break
 		}
 		s.counter.Stat("message:received", 1)
-		s.received <- MessageReceived{id, msg}
+		s.counter.Stat("message:recvSize", int64(len(msg)))
+		if !s.recvHandShake {
+			dataArray := bytes.Split(msg, []byte{0x1e})
+			if len(dataArray[0]) == 2 {
+				// empty json "{}"
+				s.recvHandShake = true
+			} else {
+				fmt.Errorf("Handshake fail because %s\n", dataArray[0])
+			}
+		} else {
+			s.received <- MessageReceived{id, msg}
+		}
 	}
 }
 

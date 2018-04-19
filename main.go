@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -8,9 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ArieShout/websocket-bench/agent"
-	"github.com/ArieShout/websocket-bench/benchmark"
-	"github.com/ArieShout/websocket-bench/master"
+	"aspnet.com/agent"
+	"aspnet.com/benchmark"
+	"aspnet.com/master"
 	flags "github.com/jessevdk/go-flags"
 )
 
@@ -21,6 +22,7 @@ var opts struct {
 	Agents        string `short:"a" long:"agents" description:"Agent addresses separated by comma"`
 	Server        string `short:"s" long:"server" description:"Websocket server host:port"`
 	Subject       string `short:"t" long:"test-subject" description:"Test subject"`
+	CmdFile       string `short:"c" long:"cmd-file" description:"Command file"`
 }
 
 func startMaster() {
@@ -38,6 +40,8 @@ func startMaster() {
 		log.Fatalln("Subject was not specified")
 	}
 
+	genPidFile("/tmp/websocket-bench-master.pid")
+
 	c := &master.Controller{}
 
 	for _, address := range agentAddresses {
@@ -49,9 +53,24 @@ func startMaster() {
 	c.Run(&benchmark.Config{
 		Host:    opts.Server,
 		Subject: opts.Subject,
+		CmdFile: opts.CmdFile,
+		OutDir:  opts.OutputDir,
 	})
 }
 
+func genPidFile(pidfile string) {
+        f, _ := os.Create(pidfile)
+        defer func() {
+		cerr := f.Close()
+		if cerr != nil {
+			log.Fatalln("Failed to close the pid file: ", cerr)
+		}
+	}()
+        _, err := f.WriteString(fmt.Sprintf("%d", os.Getpid()))
+        if err != nil {
+                log.Println("Fail to write pidfile")
+        }
+}
 func startAgent() {
 	rpc.RegisterName("Agent", new(agent.Controller))
 	rpc.HandleHTTP()
@@ -60,6 +79,7 @@ func startAgent() {
 		log.Fatal("Failed to listen on "+opts.ListenAddress, err)
 	}
 	log.Println("Listen on ", l.Addr())
+	genPidFile("/tmp/websocket-bench.pid")
 	http.Serve(l, nil)
 }
 

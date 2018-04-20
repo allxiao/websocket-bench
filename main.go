@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"aspnet.com/agent"
-	"aspnet.com/benchmark"
-	"aspnet.com/master"
+	"github.com/ArieShout/websocket-bench/agent"
+	"github.com/ArieShout/websocket-bench/benchmark"
+	"github.com/ArieShout/websocket-bench/master"
 	flags "github.com/jessevdk/go-flags"
 )
 
@@ -59,17 +59,17 @@ func startMaster() {
 }
 
 func genPidFile(pidfile string) {
-        f, _ := os.Create(pidfile)
-        defer func() {
+	f, _ := os.Create(pidfile)
+	defer func() {
 		cerr := f.Close()
 		if cerr != nil {
 			log.Fatalln("Failed to close the pid file: ", cerr)
 		}
 	}()
-        _, err := f.WriteString(fmt.Sprintf("%d", os.Getpid()))
-        if err != nil {
-                log.Println("Fail to write pidfile")
-        }
+	_, err := f.WriteString(fmt.Sprintf("%d", os.Getpid()))
+	if err != nil {
+		log.Println("Fail to write pidfile")
+	}
 }
 func startAgent() {
 	rpc.RegisterName("Agent", new(agent.Controller))

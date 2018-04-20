@@ -5,11 +5,7 @@ Inspired from https://github.com/ArchangelSDY/Sigbench .
 ## Build
 
 ```bash
-mkdir -p sigbench/src
-git clone https://github.com/clovertrail/websocket-bench-1.git sigbench/src/aspnet.com
-cd sigbench
-export GOPATH=`pwd`
-go build -v -o websocket-bench aspnet.com
+go build -tags forceposix github.com/ArieShout/websocket-bench
 ```
 
 ## Run

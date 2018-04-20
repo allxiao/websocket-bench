@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"aspnet.com/benchmark"
+	"github.com/ArieShout/websocket-bench/benchmark"
 )
 
 // SubjectMap defines the mapping from a string name to the given testing subject implementation.

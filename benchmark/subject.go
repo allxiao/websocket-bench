@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"aspnet.com/util"
+	"github.com/ArieShout/websocket-bench/util"
 )
 
 // Config defines the basic configuration for the benchmark.

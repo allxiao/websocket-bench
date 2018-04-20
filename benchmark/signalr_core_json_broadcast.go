@@ -3,7 +3,7 @@ package benchmark
 import (
 	"time"
 
-	"aspnet.com/util"
+	"github.com/ArieShout/websocket-bench/util"
 )
 
 var _ Subject = (*SignalrCoreJsonBroadcast)(nil)
@@ -19,7 +19,6 @@ func (s *SignalrCoreJsonBroadcast) InvokeTarget() string {
 func (s *SignalrCoreJsonBroadcast) Name() string {
 	return "SignalR Core Connection"
 }
-
 
 func (s *SignalrCoreJsonBroadcast) Setup(config *Config) error {
 	s.host = config.Host

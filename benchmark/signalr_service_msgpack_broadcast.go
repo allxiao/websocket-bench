@@ -3,9 +3,8 @@ package benchmark
 import (
 	"time"
 
-	"aspnet.com/util"
+	"github.com/ArieShout/websocket-bench/util"
 )
-
 
 var _ Subject = (*SignalrServiceMsgpackBroadcast)(nil)
 

@@ -16,8 +16,8 @@ import (
 	"syscall"
 	"time"
 
-	"aspnet.com/agent"
-	"aspnet.com/benchmark"
+	"github.com/ArieShout/websocket-bench/agent"
+	"github.com/ArieShout/websocket-bench/benchmark"
 )
 
 type AgentProxy struct {

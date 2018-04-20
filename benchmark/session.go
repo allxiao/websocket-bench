@@ -8,20 +8,20 @@ import (
 	"sync"
 	"time"
 
-	"aspnet.com/util"
+	"github.com/ArieShout/websocket-bench/util"
 	"github.com/gorilla/websocket"
 )
 
 // Session represents a single connection to the given websocket host.
 type Session struct {
-	ID       string
-	Conn     *websocket.Conn
-	Control  chan string
-	Sending  chan Message
-	received chan MessageReceived
-	States   chan string
+	ID            string
+	Conn          *websocket.Conn
+	Control       chan string
+	Sending       chan Message
+	received      chan MessageReceived
+	States        chan string
 	recvHandShake bool
-	invocationId int64
+	invocationId  int64
 
 	counter *util.Counter
 

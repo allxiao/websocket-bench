@@ -3,7 +3,7 @@ package benchmark
 import (
 	"time"
 
-	"aspnet.com/util"
+	"github.com/ArieShout/websocket-bench/util"
 )
 
 var _ Subject = (*SignalrServiceJsonEcho)(nil)
@@ -32,7 +32,6 @@ func (s *SignalrServiceJsonEcho) Setup(config *Config) error {
 
 	return nil
 }
-
 
 func (s *SignalrServiceJsonEcho) DoEnsureConnection(count int, conPerSec int) error {
 	return s.doEnsureConnection(count, conPerSec, func(withSessions *WithSessions) (*Session, error) {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -182,7 +183,11 @@ func (s *SignalrCoreCommon) ProcessJsonLatency(target string) {
 			}
 
 			if content.Type == 1 && content.Target == target {
-				sendStart, err := strconv.ParseInt(content.Arguments[1], 10, 64)
+				msgPayload := content.Arguments[1]
+				if pos := strings.Index(msgPayload, " "); pos >= 0 {
+					msgPayload = msgPayload[0:pos]
+				}
+				sendStart, err := strconv.ParseInt(msgPayload, 10, 64)
 				if err != nil {
 					s.LogError("message:decode_error", msgReceived.ClientID, "Failed to decode start timestamp", err)
 					continue

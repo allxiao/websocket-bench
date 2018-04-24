@@ -1,8 +1,6 @@
 package benchmark
 
 import (
-	"bytes"
-	"fmt"
 	"log"
 	"math/rand"
 	"sync"
@@ -146,17 +144,17 @@ func (s *Session) receivedWorker(id string) {
 		}
 		s.counter.Stat("message:received", 1)
 		s.counter.Stat("message:recvSize", int64(len(msg)))
-		if !s.recvHandShake {
-			dataArray := bytes.Split(msg, []byte{0x1e})
-			if len(dataArray[0]) == 2 {
-				// empty json "{}"
-				s.recvHandShake = true
-			} else {
-				fmt.Errorf("Handshake fail because %s\n", dataArray[0])
-			}
-		} else {
-			s.received <- MessageReceived{id, msg}
-		}
+		// if !s.recvHandShake {
+		// 	dataArray := bytes.Split(msg, []byte{0x1e})
+		// 	if len(dataArray[0]) == 2 {
+		// 		// empty json "{}"
+		// 		s.recvHandShake = true
+		// 	} else {
+		// 		fmt.Printf("handshake fail because %s\n", dataArray[0])
+		// 	}
+		// } else {
+		s.received <- MessageReceived{id, msg}
+		// }
 	}
 }
 

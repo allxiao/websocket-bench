@@ -668,7 +668,7 @@ func (c *Controller) StartAgents(hosts []string) {
 			log.Fatalln("Cannot new session for executable on "+host, err)
 		}
 
-		if err := session.Run(shellquote.Join("nohup", "./"+executable) + " >output.log 2>&1 &"); err != nil {
+		if err := session.Run("ulimit -n 200000; " + shellquote.Join("nohup", "./"+executable) + " >output.log 2>&1 &"); err != nil {
 			log.Fatalln("Cannot start agent on "+host, err)
 		}
 		fmt.Println("Started agent on", host)

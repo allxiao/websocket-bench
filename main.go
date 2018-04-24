@@ -16,7 +16,7 @@ import (
 )
 
 var opts struct {
-	Mode          string `short:"m" long:"mode" description:"Run mode" default:"agent" choice:"agent" choice:"master"`
+	Mode          string `short:"m" long:"mode" description:"Run mode" default:"agent" choice:"agent" choice:"master" choice:"interactive"`
 	OutputDir     string `short:"o" long:"output-dir" description:"Output directory" default:"output"`
 	ListenAddress string `short:"l" long:"listen-address" description:"Listen address" default:":7000"`
 	Agents        string `short:"a" long:"agents" description:"Agent addresses separated by comma"`
@@ -26,12 +26,40 @@ var opts struct {
 }
 
 func startMaster() {
+	agentHosts := strings.Split(opts.Agents, ",")
+	if len(agentHosts) <= 0 {
+		log.Fatalln("No agents specified")
+	}
+	log.Println("Agents: ", agentHosts)
+
+	agentSSHHosts := make([]string, len(agentHosts))
+	agentEndpoints := make([]string, len(agentHosts))
+	for _, host := range agentHosts {
+		host = strings.TrimSpace(host)
+		agentSSHHosts = append(agentSSHHosts, host+":22")
+		agentEndpoints = append(agentEndpoints, host+":7000")
+	}
+
+	c := &master.Controller{}
+
+	c.StartAgents(agentSSHHosts)
+
+	doStartInteractiveMaster(c, agentEndpoints)
+}
+
+func startInteractive() {
 	agentAddresses := strings.Split(opts.Agents, ",")
 	if len(agentAddresses) <= 0 {
 		log.Fatalln("No agents specified")
 	}
 	log.Println("Agents: ", agentAddresses)
 
+	c := &master.Controller{}
+
+	doStartInteractiveMaster(c, agentAddresses)
+}
+
+func doStartInteractiveMaster(c *master.Controller, agents []string) {
 	if opts.Server == "" {
 		log.Fatalln("Server host:port was not specified")
 	}
@@ -42,9 +70,7 @@ func startMaster() {
 
 	genPidFile("/tmp/websocket-bench-master.pid")
 
-	c := &master.Controller{}
-
-	for _, address := range agentAddresses {
+	for _, address := range agents {
 		if err := c.RegisterAgent(address); err != nil {
 			log.Fatalln("Failed to register agent: ", address, err)
 		}
@@ -89,7 +115,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if opts.Mode == "master" {
+	if opts.Mode == "interactive" {
+		startInteractive()
+	} else if opts.Mode == "master" {
 		startMaster()
 	} else {
 		startAgent()

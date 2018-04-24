@@ -8,6 +8,9 @@ import (
 	"net/rpc"
 	"os"
 	"os/signal"
+	"os/user"
+	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -16,15 +19,23 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bramvdbogaerde/go-scp"
+	shellquote "github.com/kballard/go-shellquote"
+
 	"github.com/ArieShout/websocket-bench/agent"
 	"github.com/ArieShout/websocket-bench/benchmark"
+
+	"github.com/bramvdbogaerde/go-scp/auth"
+	"golang.org/x/crypto/ssh"
 )
 
+// AgentProxy is an RPC proxy to a remote agent.
 type AgentProxy struct {
 	Address string
 	Client  *rpc.Client
 }
 
+// NewAgentProxy creates a new RPC proxy to a remote agent.
 func NewAgentProxy(address string) (*AgentProxy, error) {
 	client, err := rpc.DialHTTP("tcp", address)
 	if err != nil {
@@ -42,6 +53,7 @@ type Controller struct {
 	Agents []*AgentProxy
 }
 
+// RegisterAgent adds a new agent proxy to the master's agent set.
 func (c *Controller) RegisterAgent(address string) error {
 	proxy, err := NewAgentProxy(address)
 	if err != nil {
@@ -97,7 +109,7 @@ func (c *Controller) printCounters(counters map[string]int64) {
 	}
 }
 
-func (c *Controller) SplitNumber(total, index int) int {
+func (c *Controller) splitNumber(total, index int) int {
 	agentCount := len(c.Agents)
 	base := total / agentCount
 	if index < total%agentCount {
@@ -235,7 +247,7 @@ func (c *Controller) waitTimeoutOrComplete(parts []string, stop bool) error {
 	}
 	timeoutSec, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return fmt.Errorf("ERROR: ", err)
+		return fmt.Errorf("ERROR: %v", err)
 	}
 	if timeoutSec < 0 {
 		return fmt.Errorf("ERROR: connection number is negative")
@@ -259,17 +271,108 @@ func (c *Controller) waitTimeoutOrComplete(parts []string, stop bool) error {
 	return nil
 }
 
+const upperBound = 10000
+
+func (c *Controller) autoRun(config *benchmark.Config) error {
+	// TODO: parameterize control bounds and steps
+	senderLimit := upperBound
+	for i := 100; i <= 10000; i += 100 {
+		fmt.Printf(">>> connect %d\n", i)
+		c.connect([]string{"c", strconv.Itoa(i)})
+
+		lower := 1
+		upper := senderLimit
+		if upper > i {
+			upper = i
+		}
+
+		if !c.trySender(lower) {
+			fmt.Printf("connection: %d, sender: 0", i)
+			break
+		}
+
+		if c.trySender(upper) {
+			fmt.Printf("connection: %d, sender: %d", i, upper)
+			continue
+		}
+
+		for lower < upper {
+			mid := lower + (upper-lower)/2
+			if c.trySender(mid) {
+				lower = mid + 1
+			} else {
+				upper = mid - 1
+			}
+		}
+
+		fmt.Printf("connection: %d, sender: %d", i, lower)
+	}
+	return nil
+}
+
+const (
+	ltPrefix    = "message:lt:"
+	ltPrefixLen = len(ltPrefix)
+	gtPrefix    = "message:gt:"
+)
+
+func (c *Controller) trySender(count int) bool {
+	fmt.Printf(">>> try send %d\n", count)
+	c.send([]string{"s", strconv.Itoa(count)})
+	time.Sleep(5 * time.Second)
+
+	pass := 0
+	for i := 0; i < 5; i++ {
+		c.doInvoke("Clear", "message")
+		time.Sleep(10 * time.Second)
+		counters := c.collectCounters()
+
+		goodCount := 0
+		total := 0
+		for k, v := range counters {
+			if strings.HasPrefix(k, ltPrefix) {
+				latencyStr := k[ltPrefixLen:]
+				latency, _ := strconv.Atoi(latencyStr)
+
+				if latency <= 500 {
+					goodCount += int(v)
+				}
+				total += int(v)
+			} else if strings.HasPrefix(k, gtPrefix) {
+				total += int(v)
+			}
+		}
+
+		if total == 0 {
+			fmt.Println("<<< Total is zero!")
+			continue
+		}
+
+		ratio := float64(goodCount) / float64(total)
+
+		fmt.Printf("<<< ratio: %.2f%%, %v\n", ratio*100, counters)
+
+		if ratio >= 0.98 {
+			pass++
+		}
+
+		time.Sleep(2 * time.Second)
+	}
+
+	return pass >= 3
+}
+
 func (c *Controller) batchRun(config *benchmark.Config) error {
 	cmdFile := config.CmdFile
 	file, err := os.Open(cmdFile)
 
 	if err != nil {
-		return fmt.Errorf("Fail to open %s\n", cmdFile)
+		return fmt.Errorf("Fail to open %s", cmdFile)
 	}
 	defer func() {
 		cerr := file.Close()
 		if cerr != nil {
-			fmt.Println("Error occurs when close '%s'\n", cmdFile)
+			fmt.Printf("Error occurs when close '%s'\n", cmdFile)
 		}
 	}()
 
@@ -332,7 +435,7 @@ func (c *Controller) batchRun(config *benchmark.Config) error {
 			}
 		default:
 			fmt.Printf("Illegal command!")
-			return fmt.Errorf("Illegal command!")
+			return fmt.Errorf("illegal command")
 		}
 	}
 	return nil
@@ -391,8 +494,6 @@ func (c *Controller) interactiveRun() error {
 			}
 		}
 	}
-
-	return nil
 }
 
 func (c *Controller) clearAndWaitAndDump(secWait int) {
@@ -410,7 +511,7 @@ func (c *Controller) connect(parts []string) error {
 	}
 	connection, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return fmt.Errorf("ERROR: ", err)
+		return fmt.Errorf("ERROR: %v", err)
 	}
 	if connection < 0 {
 		return fmt.Errorf("ERROR: connection number is negative")
@@ -419,7 +520,7 @@ func (c *Controller) connect(parts []string) error {
 	if len(parts) == 3 {
 		connPerSecond, err = strconv.Atoi(parts[2])
 		if err != nil {
-			return fmt.Errorf("ERROR: ", err)
+			return fmt.Errorf("ERROR: %v", err)
 		}
 	}
 	if connPerSecond < 0 {
@@ -427,14 +528,14 @@ func (c *Controller) connect(parts []string) error {
 	}
 
 	for i, agentProxy := range c.Agents {
-		agentConnection := c.SplitNumber(connection, i)
-		agentConnPerSec := c.SplitNumber(connPerSecond, i)
+		agentConnection := c.splitNumber(connection, i)
+		agentConnPerSec := c.splitNumber(connPerSecond, i)
 		err := agentProxy.Client.Call("Agent.Invoke", &agent.Invocation{
 			Command:   "EnsureConnection",
 			Arguments: []string{strconv.Itoa(agentConnection), strconv.Itoa(agentConnPerSec)},
 		}, nil)
 		if err != nil {
-			fmt.Errorf("ERROR[%s]: %v\n", agentProxy.Address, err)
+			return fmt.Errorf("ERROR[%s]: %v", agentProxy.Address, err)
 		}
 	}
 	return nil
@@ -447,26 +548,26 @@ func (c *Controller) send(parts []string) error {
 	}
 	clients, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return fmt.Errorf("ERROR: ", err)
+		return fmt.Errorf("ERROR: %v", err)
 	}
 	interval := 1000
 	if partsLen >= 3 {
 		interval, err = strconv.Atoi(parts[2])
 		if err != nil {
-			return fmt.Errorf("ERROR: ", err)
+			return fmt.Errorf("ERROR: %v", err)
 		}
 	}
 	if clients < 0 {
 		clients = math.MaxInt32
 	}
 	for i, agentProxy := range c.Agents {
-		agentClients := c.SplitNumber(clients, i)
+		agentClients := c.splitNumber(clients, i)
 		err := agentProxy.Client.Call("Agent.Invoke", &agent.Invocation{
 			Command:   "Send",
 			Arguments: []string{strconv.Itoa(agentClients), strconv.Itoa(interval)},
 		}, nil)
 		if err != nil {
-			return fmt.Errorf("ERROR[%s]: %v\n", agentProxy.Address, err)
+			return fmt.Errorf("ERROR[%s]: %v", agentProxy.Address, err)
 		}
 	}
 	return nil
@@ -481,6 +582,7 @@ func (c *Controller) createOutDir(outDir string) {
 	}
 }
 
+// Run starts the master node.
 func (c *Controller) Run(config *benchmark.Config) error {
 	if err := c.setupAgents(config); err != nil {
 		return err
@@ -497,10 +599,8 @@ func (c *Controller) Run(config *benchmark.Config) error {
 	c.createOutDir(config.OutDir)
 	if config.CmdFile == "" {
 		return c.interactiveRun()
-	} else {
-		return c.batchRun(config)
 	}
-	return nil
+	return c.batchRun(config)
 }
 
 func init() {
@@ -510,4 +610,61 @@ func init() {
 		headers[i] = parts[1]
 	}
 	csvHeader = strings.Join(headers, ",")
+}
+
+// StartAgents copies the current running executable to remote hosts and starts the process without arguments.
+func (c *Controller) StartAgents(hosts []string) {
+	user, err := user.Current()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	keyPath := path.Join(user.HomeDir, ".ssh", "id_rsa")
+	clientConfig, err := auth.PrivateKey(user.Name, keyPath, ssh.InsecureIgnoreHostKey())
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	executablePath, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	executable := filepath.Base(executablePath)
+
+	for _, host := range hosts {
+		sshClient, err := ssh.Dial("tcp", host, &clientConfig)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		defer sshClient.Close()
+
+		session, err := sshClient.NewSession()
+		if err != nil {
+			log.Fatalln(err)
+		}
+		defer session.Close()
+
+		if err := session.Run(shellquote.Join("killall", executable)); err != nil {
+			log.Fatalln(err)
+		}
+
+		scpClient := scp.NewClient(host, &clientConfig)
+
+		if err := scpClient.Connect(); err != nil {
+			log.Fatalln(err)
+		}
+
+		f, err := os.Open(executablePath)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		defer scpClient.Session.Close()
+		defer f.Close()
+
+		scpClient.CopyFile(f, executable, "0755")
+
+		if err := session.Run(shellquote.Join("./" + executable)); err != nil {
+			log.Fatalln(err)
+		}
+	}
 }

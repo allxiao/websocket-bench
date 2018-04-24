@@ -32,8 +32,8 @@ func startMaster() {
 	}
 	log.Println("Agents: ", agentHosts)
 
-	agentSSHHosts := make([]string, len(agentHosts))
-	agentEndpoints := make([]string, len(agentHosts))
+	agentSSHHosts := make([]string, 0, len(agentHosts))
+	agentEndpoints := make([]string, 0, len(agentHosts))
 	for _, host := range agentHosts {
 		host = strings.TrimSpace(host)
 		agentSSHHosts = append(agentSSHHosts, host+":22")

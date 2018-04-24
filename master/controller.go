@@ -614,17 +614,18 @@ func init() {
 
 // StartAgents copies the current running executable to remote hosts and starts the process without arguments.
 func (c *Controller) StartAgents(hosts []string) {
+	fmt.Printf("starting %d agents: %v\n", len(hosts), hosts)
 	user, err := user.Current()
 	if err != nil {
 		log.Fatalln(err)
 	}
 	keyPath := path.Join(user.HomeDir, ".ssh", "id_rsa")
-	clientConfig, err := auth.PrivateKey(user.Name, keyPath, ssh.InsecureIgnoreHostKey())
+	clientConfig, err := auth.PrivateKey(user.Username, keyPath, ssh.InsecureIgnoreHostKey())
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	executablePath, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	executablePath, err := filepath.Abs(os.Args[0])
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -632,39 +633,47 @@ func (c *Controller) StartAgents(hosts []string) {
 	executable := filepath.Base(executablePath)
 
 	for _, host := range hosts {
+		fmt.Printf("dial %s@%s\n", user.Username, host)
 		sshClient, err := ssh.Dial("tcp", host, &clientConfig)
 		if err != nil {
-			log.Fatalln(err)
+			log.Fatalln("Cannot connect to SSH "+host, err)
 		}
 		defer sshClient.Close()
 
 		session, err := sshClient.NewSession()
 		if err != nil {
-			log.Fatalln(err)
+			log.Fatalln("Cannot new SSH session to "+host, err)
 		}
 		defer session.Close()
 
-		if err := session.Run(shellquote.Join("killall", executable)); err != nil {
-			log.Fatalln(err)
-		}
+		session.Run(shellquote.Join("killall", executable))
 
 		scpClient := scp.NewClient(host, &clientConfig)
 
 		if err := scpClient.Connect(); err != nil {
-			log.Fatalln(err)
+			log.Fatalln("Cannot connect SSH "+host+" for scp", err)
 		}
 
 		f, err := os.Open(executablePath)
 		if err != nil {
-			log.Fatalln(err)
+			log.Fatalln("Cannot open executable "+executablePath, err)
 		}
 		defer scpClient.Session.Close()
 		defer f.Close()
 
 		scpClient.CopyFile(f, executable, "0755")
 
-		if err := session.Run(shellquote.Join("./" + executable)); err != nil {
-			log.Fatalln(err)
+		session, err = sshClient.NewSession()
+		if err != nil {
+			log.Fatalln("Cannot new session for executable on "+host, err)
 		}
+
+		if err := session.Run(shellquote.Join("nohup", "./"+executable) + " >output.log 2>&1 &"); err != nil {
+			log.Fatalln("Cannot start agent on "+host, err)
+		}
+		fmt.Println("Started agent on", host)
 	}
+
+	fmt.Println("Wait for 10 seconds for the agents start up...")
+	time.Sleep(time.Second * 10)
 }

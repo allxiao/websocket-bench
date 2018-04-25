@@ -135,6 +135,9 @@ func (s *Session) sendingWorker() {
 					s.sendMessage(CloseMessage{})
 				}
 				return
+			case "closed_remotely":
+				atomic.StoreInt32(&s.state, SessionClosed)
+				return
 			case "terminated":
 				atomic.StoreInt32(&s.state, SessionTerminated)
 				// closed abnormally, no need to issue close request from the client side
@@ -166,6 +169,7 @@ func (s *Session) receivedWorker(id string) {
 					s.counter.Stat("connection:closed", 1)
 				} else {
 					s.counter.Stat("connection:closed_remotely", 1)
+					s.Control <- "closed_remotely"
 				}
 				s.States <- "closed"
 			}

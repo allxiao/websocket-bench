@@ -57,7 +57,23 @@ func (s *SignalrCoreCommon) SignalrCoreBaseConnect(protocol string) (session *Se
 	}
 
 	s.counter.Stat("connection:inprogress", 1)
-	wsURL := "ws://" + s.host + "/chat"
+
+	negotiateResponse, err := http.Post("http://"+s.host+"/chat/negotiate", "text/plain;charset=UTF-8", strings.NewReader(""))
+	if err != nil {
+		s.LogError("connection:error", id, "Failed to negotiate with the server", err)
+		return
+	}
+	defer negotiateResponse.Body.Close()
+
+	decoder := json.NewDecoder(negotiateResponse.Body)
+	var negotiation SignalrServiceNegotiation
+	err = decoder.Decode(&negotiation)
+	if err != nil {
+		s.LogError("connection:error", id, "Failed to decode server negotiation response", err)
+		return
+	}
+
+	wsURL := "ws://" + s.host + "/chat?id=" + negotiation.ConnectionID
 	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		s.LogError("connection:error", id, "Failed to connect to websocket", err)
@@ -66,9 +82,6 @@ func (s *SignalrCoreCommon) SignalrCoreBaseConnect(protocol string) (session *Se
 
 	session = NewSession(id, s.received, s.counter, c)
 	if session != nil {
-		s.counter.Stat("connection:inprogress", -1)
-		s.counter.Stat("connection:established", 1)
-
 		session.Start()
 		session.NegotiateProtocol(protocol)
 		return

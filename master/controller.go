@@ -674,6 +674,6 @@ func (c *Controller) StartAgents(hosts []string) {
 		fmt.Println("Started agent on", host)
 	}
 
-	fmt.Println("Wait for 10 seconds for the agents start up...")
-	time.Sleep(time.Second * 10)
+	fmt.Println("Wait for 10 seconds before the agents start up...")
+	time.Sleep(10 * time.Second)
 }

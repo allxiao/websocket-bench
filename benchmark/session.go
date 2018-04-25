@@ -18,6 +18,7 @@ type Session struct {
 	Sending       chan Message
 	received      chan MessageReceived
 	States        chan string
+	terminated    bool
 	recvHandShake bool
 	invocationId  int64
 
@@ -36,6 +37,7 @@ func NewSession(id string, received chan MessageReceived, counter *util.Counter,
 	s.Sending = make(chan Message)
 	s.received = received
 	s.States = make(chan string)
+	s.terminated = false
 	s.genLock = sync.Mutex{}
 	s.recvHandShake = false
 	return s
@@ -61,6 +63,10 @@ func (s *Session) WriteTextMessage(msg string) {
 func (s *Session) InstallMessageGeneator(gen MessageGenerator) {
 	s.genLock.Lock()
 	defer s.genLock.Unlock()
+
+	if s.terminated {
+		return
+	}
 
 	s.removeMessageGeneratorUnsafe()
 
@@ -116,6 +122,10 @@ func (s *Session) sendingWorker() {
 				s.counter.Stat("connection:closing", 1)
 				s.sendMessage(CloseMessage{})
 				return
+			case "terminated":
+				s.terminated = true
+				// closed abnormally, no need to issue close request from the client side
+				return
 			default:
 				log.Println("Received unhandled control message: ", control)
 			}
@@ -133,8 +143,10 @@ func (s *Session) receivedWorker(id string) {
 			s.counter.Stat("connection:established", -1)
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure) {
 				log.Println("Failed to read incoming message:", err)
-				s.counter.Stat("message:receive_error", 1)
-				s.States <- "error"
+				s.counter.Stat("connection:terminated", 1)
+				s.RemoveMessageGenerator()
+				s.Control <- "terminated"
+				s.States <- "terminated"
 			} else {
 				s.counter.Stat("connection:closing", -1)
 				s.counter.Stat("connection:closed", 1)

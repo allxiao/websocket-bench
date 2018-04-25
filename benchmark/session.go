@@ -6,23 +6,33 @@ import (
 	"log"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ArieShout/websocket-bench/util"
 	"github.com/gorilla/websocket"
 )
 
+const (
+	SessionInitialized       = 0
+	SessionConnecting        = iota
+	SessionWaitingHandshake  = iota
+	SessionHandshakeReceived = iota
+	SessionEstablished       = iota
+	SessionClosing           = iota
+	SessionClosed            = iota
+	SessionTerminated        = iota
+)
+
 // Session represents a single connection to the given websocket host.
 type Session struct {
-	ID            string
-	Conn          *websocket.Conn
-	Control       chan string
-	Sending       chan Message
-	received      chan MessageReceived
-	States        chan string
-	terminated    bool
-	recvHandShake bool
-	invocationId  int64
+	ID       string
+	Conn     *websocket.Conn
+	Control  chan string
+	Sending  chan Message
+	received chan MessageReceived
+	States   chan string
+	state    int32
 
 	counter *util.Counter
 
@@ -39,9 +49,8 @@ func NewSession(id string, received chan MessageReceived, counter *util.Counter,
 	s.Sending = make(chan Message)
 	s.received = received
 	s.States = make(chan string)
-	s.terminated = false
+	atomic.StoreInt32(&s.state, SessionInitialized)
 	s.genLock = sync.Mutex{}
-	s.recvHandShake = false
 	return s
 }
 
@@ -52,7 +61,7 @@ func (s *Session) Start() {
 
 func (s *Session) NegotiateProtocol(protocol string) {
 	s.WriteTextMessage("{\"protocol\":\"" + protocol + "\",\"version\":1}\x1e")
-	s.recvHandShake = false
+	atomic.StoreInt32(&s.state, SessionWaitingHandshake)
 }
 
 func (s *Session) WriteTextMessage(msg string) {
@@ -66,7 +75,7 @@ func (s *Session) InstallMessageGeneator(gen MessageGenerator) {
 	s.genLock.Lock()
 	defer s.genLock.Unlock()
 
-	if s.terminated {
+	if atomic.LoadInt32(&s.state) >= SessionClosing {
 		return
 	}
 
@@ -82,8 +91,7 @@ func (s *Session) InstallMessageGeneator(gen MessageGenerator) {
 		for {
 			select {
 			case <-ticker.C:
-				s.Sending <- gen.Generate(s.ID, s.invocationId)
-				s.invocationId++
+				s.Sending <- gen.Generate(s.ID, 0)
 			case <-s.genClose:
 				return
 			}
@@ -106,6 +114,7 @@ func (s *Session) removeMessageGeneratorUnsafe() {
 }
 
 func (s *Session) sendMessage(msg Message) {
+	fmt.Println("sending message: ", string(msg.Bytes()))
 	err := s.Conn.WriteMessage(msg.Type(), msg.Bytes())
 	s.counter.Stat("message:sent", 1)
 	s.counter.Stat("message:sendSize", int64(len(msg.Bytes())))
@@ -121,11 +130,13 @@ func (s *Session) sendingWorker() {
 		case control := <-s.Control:
 			switch control {
 			case "close":
-				s.counter.Stat("connection:closing", 1)
-				s.sendMessage(CloseMessage{})
+				if atomic.LoadInt32(&s.state) < SessionClosing {
+					s.counter.Stat("connection:closing", 1)
+					s.sendMessage(CloseMessage{})
+				}
 				return
 			case "terminated":
-				s.terminated = true
+				atomic.StoreInt32(&s.state, SessionTerminated)
 				// closed abnormally, no need to issue close request from the client side
 				return
 			default:
@@ -150,19 +161,26 @@ func (s *Session) receivedWorker(id string) {
 				s.Control <- "terminated"
 				s.States <- "terminated"
 			} else {
-				s.counter.Stat("connection:closing", -1)
-				s.counter.Stat("connection:closed", 1)
+				if atomic.LoadInt32(&s.state) == SessionClosing {
+					s.counter.Stat("connection:closing", -1)
+					s.counter.Stat("connection:closed", 1)
+				} else {
+					s.counter.Stat("connection:closed_remotely", 1)
+				}
 				s.States <- "closed"
 			}
 			break
 		}
 		s.counter.Stat("message:received", 1)
 		s.counter.Stat("message:recvSize", int64(len(msg)))
-		if !s.recvHandShake {
+		if atomic.LoadInt32(&s.state) == SessionWaitingHandshake {
 			dataArray := bytes.Split(msg, []byte{0x1e})
 			if len(dataArray[0]) == 2 {
 				// empty json "{}"
-				s.recvHandShake = true
+				atomic.StoreInt32(&s.state, SessionHandshakeReceived)
+
+				s.counter.Stat("connection:inprogress", -1)
+				s.counter.Stat("connection:established", 1)
 			} else {
 				fmt.Printf("handshake fail because %s\n", dataArray[0])
 			}

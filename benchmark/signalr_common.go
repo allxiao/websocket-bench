@@ -123,8 +123,10 @@ func (s *SignalrCoreCommon) SignalrServiceBaseConnect(protocol string) (session 
 		return
 	}
 
-	u.Path = u.Path + "/negotiate"
-	req, err := http.NewRequest("POST", u.String(), strings.NewReader(""))
+	negotiatePath, _ := url.Parse("negotiate")
+	negotiateURL := u.ResolveReference(negotiatePath)
+	negotiateURL.RawQuery = u.RawQuery
+	req, err := http.NewRequest("POST", negotiateURL.String(), strings.NewReader(""))
 	if err != nil {
 		s.LogError("connection:error", id, "Failed to create POST request to SignalR service", err)
 		return
@@ -147,7 +149,6 @@ func (s *SignalrCoreCommon) SignalrServiceBaseConnect(protocol string) (session 
 		return
 	}
 
-	u, _ = url.Parse(negotiation.URL)
 	query := u.Query()
 	query.Set("access_token", negotiation.AccessToken)
 	query.Set("id", serviceNegotiation.ConnectionID)
@@ -163,9 +164,6 @@ func (s *SignalrCoreCommon) SignalrServiceBaseConnect(protocol string) (session 
 	}
 	session = NewSession(id, s.received, s.counter, c)
 	if session != nil {
-		s.counter.Stat("connection:inprogress", -1)
-		s.counter.Stat("connection:established", 1)
-
 		session.Start()
 		session.NegotiateProtocol(protocol)
 		return

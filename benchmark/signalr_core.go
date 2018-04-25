@@ -18,19 +18,18 @@ type SignalRCoreHandshakeResp struct {
 }
 
 type SignalRCommon struct {
-	Type         int      `json:"type"`
+	Type int `json:"type"`
 }
 
 type SignalRCoreInvocation struct {
-	InvocationId string   `json:"invocationId"`
-	Type         int      `json:"type"`
-	Target       string   `json:"target"`
-	Arguments    []string `json:"arguments"`
+	Type      int      `json:"type"`
+	Target    string   `json:"target"`
+	Arguments []string `json:"arguments"`
 }
 
 type MsgpackInvocation struct {
 	MessageType  int32
-	Header	     map[string]string
+	Header       map[string]string
 	InvocationID string
 	Target       string
 	Params       []string
@@ -72,9 +71,8 @@ var _ MessageGenerator = (*SignalRCoreTextMessageGenerator)(nil)
 
 func (g *SignalRCoreTextMessageGenerator) Generate(uid string, invocationId int64) Message {
 	msg, err := json.Marshal(&SignalRCoreInvocation{
-		Type:         1,
-		//InvocationId: strconv.FormatInt(invocationId, 10),
-		Target:       g.Target,
+		Type:   1,
+		Target: g.Target,
 		Arguments: []string{
 			uid,
 			strconv.FormatInt(time.Now().UnixNano(), 10),
@@ -115,10 +113,10 @@ func appendLength(bytes []byte) []byte {
 
 func (g MessagePackMessageGenerator) Generate(uid string, invocationId int64) Message {
 	invocation := MsgpackInvocation{
-		MessageType:  1,
-		Header: map[string]string{},
+		MessageType: 1,
+		Header:      map[string]string{},
 		//InvocationID: nil, //strconv.FormatInt(invocationId, 10),
-		Target:       g.Target,
+		Target: g.Target,
 		Params: []string{
 			uid,
 			strconv.FormatInt(time.Now().UnixNano(), 10),

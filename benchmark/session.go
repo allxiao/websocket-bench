@@ -133,6 +133,7 @@ func (s *Session) sendingWorker() {
 				if atomic.LoadInt32(&s.state) < SessionClosing {
 					s.counter.Stat("connection:closing", 1)
 					s.sendMessage(CloseMessage{})
+					atomic.StoreInt32(&s.state, SessionClosing)
 				}
 				return
 			case "closed_remotely":

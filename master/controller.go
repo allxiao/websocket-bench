@@ -356,16 +356,22 @@ func (c *Controller) trySender(count int, cfg *benchmark.AutorunConfig) bool {
 	fmt.Printf("<<< connection %d - passed: %v, pass: %d, fail: %d\n", count, passed, pass, cfg.Round-pass)
 
 	fmt.Print(">>> reset senders")
-	c.send([]string{"s", "0"})
+	round := 0
 	for {
+		round++
+		c.send([]string{"s", "0"})
 		c.doInvoke("Clear", "message")
 		time.Sleep(time.Second)
 		counters := c.collectCounters()
 		_, total := c.statCounters(counters)
+		sender, _ := counters["connection:sender"]
 		if total < 10 {
 			break
 		}
 		fmt.Print(".")
+		if round%10 == 0 {
+			fmt.Printf("\n<<< [reseting] received %d, sender %d, %v\n", total, sender, counters)
+		}
 	}
 	fmt.Println()
 

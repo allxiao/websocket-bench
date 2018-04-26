@@ -40,6 +40,8 @@ func (s *SignalrCoreJsonEcho) DoEnsureConnection(count int, conPerSec int) error
 }
 
 func (s *SignalrCoreJsonEcho) DoSend(clients int, intervalMillis int) error {
+	s.counter.Clear("connection:stop_sender")
+	s.counter.Clear("connection:sender_stoped")
 	return s.doSend(clients, intervalMillis, &SignalRCoreTextMessageGenerator{
 		WithInterval: WithInterval{
 			interval: time.Millisecond * time.Duration(intervalMillis),

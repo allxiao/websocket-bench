@@ -75,14 +75,15 @@ func (s *Session) InstallMessageGeneator(gen MessageGenerator) {
 	s.genLock.Lock()
 	defer s.genLock.Unlock()
 
+	s.removeMessageGeneratorUnsafe()
+
 	if atomic.LoadInt32(&s.state) >= SessionClosing {
 		return
 	}
 
-	s.removeMessageGeneratorUnsafe()
-
 	s.genClose = make(chan struct{})
 	go func() {
+		s.counter.Stat("connection:sender", 1)
 		// randomize the start time of the generator
 		time.Sleep(time.Millisecond * time.Duration(rand.Int()%1000))
 		ticker := time.NewTicker(gen.Interval())
@@ -93,6 +94,8 @@ func (s *Session) InstallMessageGeneator(gen MessageGenerator) {
 			case <-ticker.C:
 				s.Sending <- gen.Generate(s.ID, 0)
 			case <-s.genClose:
+				s.counter.Stat("connection:sender", -1)
+				s.counter.Stat("connection:sender_stoped", 1)
 				return
 			}
 		}
@@ -108,13 +111,14 @@ func (s *Session) RemoveMessageGenerator() {
 
 func (s *Session) removeMessageGeneratorUnsafe() {
 	if s.genClose != nil {
+		s.counter.Stat("connection:stop_sender", 1)
 		close(s.genClose)
 		s.genClose = nil
 	}
 }
 
 func (s *Session) sendMessage(msg Message) {
-	fmt.Println("sending message: ", string(msg.Bytes()))
+	//fmt.Println("sending message: ", string(msg.Bytes()))
 	err := s.Conn.WriteMessage(msg.Type(), msg.Bytes())
 	s.counter.Stat("message:sent", 1)
 	s.counter.Stat("message:sendSize", int64(len(msg.Bytes())))

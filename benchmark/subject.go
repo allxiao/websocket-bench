@@ -111,6 +111,7 @@ func (s *WithSessions) doSend(clients int, intervalMillis int, gen MessageGenera
 	s.doStopSendUnsafe()
 
 	sessionCount := len(s.sessions)
+	fmt.Printf("doSend, session count %d, target sender %d\n", sessionCount, clients)
 	bound := sessionCount
 	if clients < bound {
 		bound = clients

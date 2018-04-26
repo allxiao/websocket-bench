@@ -10,15 +10,6 @@ import (
 	"github.com/ArieShout/websocket-bench/util"
 )
 
-// Config defines the basic configuration for the benchmark.
-type Config struct {
-	Host    string
-	Subject string
-	CmdFile string
-	OutDir  string
-	Mode    string
-}
-
 // Subject defines the interface for a test subject.
 type Subject interface {
 	Name() string

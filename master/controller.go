@@ -271,12 +271,12 @@ func (c *Controller) waitTimeoutOrComplete(parts []string, stop bool) error {
 	return nil
 }
 
-const upperBound = 10000
-
 func (c *Controller) autoRun(config *benchmark.Config) error {
 	// TODO: parameterize control bounds and steps
-	senderLimit := upperBound
-	for i := 100; i <= upperBound; i += 100 {
+	cfg := config.AutorunConfig
+
+	senderLimit := cfg.EndConnection
+	for i := cfg.StartConnection; i <= cfg.EndConnection; i += cfg.Step {
 		fmt.Printf(">>> connect %d\n", i)
 		c.connect([]string{"c", strconv.Itoa(i)})
 
@@ -286,26 +286,26 @@ func (c *Controller) autoRun(config *benchmark.Config) error {
 			upper = i
 		}
 
-		if !c.trySender(lower) {
-			fmt.Printf("connection: %d, sender: 0", i)
+		if !c.trySender(lower, &cfg) {
+			fmt.Printf("connection: %d, sender: 0\n", i)
 			break
 		}
 
-		if c.trySender(upper) {
-			fmt.Printf("connection: %d, sender: %d", i, upper)
+		if c.trySender(upper, &cfg) {
+			fmt.Printf("connection: %d, sender: %d\n", i, upper)
 			continue
 		}
 
 		for lower < upper {
 			mid := lower + (upper-lower)/2
-			if c.trySender(mid) {
+			if c.trySender(mid, &cfg) {
 				lower = mid + 1
 			} else {
 				upper = mid - 1
 			}
 		}
 
-		fmt.Printf("connection: %d, sender: %d", i, lower)
+		fmt.Printf("connection: %d, sender: %d\n", i, lower)
 
 		// the server / service cannot support the same number of senders as the connections.
 		// in the next cycle when we increase the connections, we expect the connections to be
@@ -323,13 +323,13 @@ const (
 	gtPrefix    = "message:gt:"
 )
 
-func (c *Controller) trySender(count int) bool {
+func (c *Controller) trySender(count int, cfg *benchmark.AutorunConfig) bool {
 	fmt.Printf(">>> try send %d\n", count)
 	c.send([]string{"s", strconv.Itoa(count)})
 	time.Sleep(5 * time.Second)
 
 	pass := 0
-	for i := 0; i < 5; i++ {
+	for i := 0; i < cfg.Round; i++ {
 		c.doInvoke("Clear", "message")
 		time.Sleep(10 * time.Second)
 		counters := c.collectCounters()
@@ -359,14 +359,14 @@ func (c *Controller) trySender(count int) bool {
 
 		fmt.Printf("<<< ratio: %.2f%%, %v\n", ratio*100, counters)
 
-		if ratio >= 0.98 {
+		if ratio >= cfg.QosRatio {
 			pass++
 		}
 
 		time.Sleep(2 * time.Second)
 	}
 
-	return pass >= 3
+	return pass >= cfg.PassRound
 }
 
 func (c *Controller) batchRun(config *benchmark.Config) error {

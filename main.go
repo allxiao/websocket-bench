@@ -23,6 +23,13 @@ var opts struct {
 	Server        string `short:"s" long:"server" description:"Websocket server host:port"`
 	Subject       string `short:"t" long:"test-subject" description:"Test subject"`
 	CmdFile       string `short:"c" long:"cmd-file" description:"Command file"`
+
+	StartConnection int     `long:"start-connection" description:"[Autorun] The connection count to start with."`
+	EndConnection   int     `long:"end-connection" description:"[Autorun] The upper bound of connection count to stop at."`
+	Step            int     `long:"step" description:"[Autorun] How many connection should be increased in each iteration."`
+	Round           int     `long:"round" description:"[Autorun] How many rounds to check in each iteration."`
+	PassRound       int     `long:"pass-round" description:"[Autorun] How many rounds is required to pass the QoS ratio when we mark the iteration as pass."`
+	QosRatio        float64 `long:"qos-ratio" description:"[Autorun] What is the target ratio for the messages whose RTT is less than 500ms."`
 }
 
 func startMaster() {
@@ -82,6 +89,14 @@ func doStartInteractiveMaster(c *master.Controller, agents []string) {
 		CmdFile: opts.CmdFile,
 		OutDir:  opts.OutputDir,
 		Mode:    opts.Mode,
+		AutorunConfig: benchmark.NewAutorunConfig(func(cfg *benchmark.AutorunConfig) {
+			cfg.StartConnection = opts.StartConnection
+			cfg.EndConnection = opts.EndConnection
+			cfg.Step = opts.Step
+			cfg.Round = opts.Round
+			cfg.PassRound = opts.PassRound
+			cfg.QosRatio = opts.QosRatio
+		}),
 	})
 }
 

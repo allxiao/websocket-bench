@@ -54,18 +54,6 @@ func startMaster() {
 	doStartInteractiveMaster(c, agentEndpoints)
 }
 
-func startInteractive() {
-	agentAddresses := strings.Split(opts.Agents, ",")
-	if len(agentAddresses) <= 0 {
-		log.Fatalln("No agents specified")
-	}
-	log.Println("Agents: ", agentAddresses)
-
-	c := &master.Controller{}
-
-	doStartInteractiveMaster(c, agentAddresses)
-}
-
 func doStartInteractiveMaster(c *master.Controller, agents []string) {
 	if opts.Server == "" {
 		log.Fatalln("Server host:port was not specified")
@@ -131,9 +119,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if opts.Mode == "interactive" {
-		startInteractive()
-	} else if opts.Mode == "master" {
+	if opts.Mode == "interactive" || opts.Mode == "master" {
 		startMaster()
 	} else {
 		startAgent()

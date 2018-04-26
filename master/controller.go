@@ -334,21 +334,7 @@ func (c *Controller) trySender(count int, cfg *benchmark.AutorunConfig) bool {
 		time.Sleep(10 * time.Second)
 		counters := c.collectCounters()
 
-		goodCount := 0
-		total := 0
-		for k, v := range counters {
-			if strings.HasPrefix(k, ltPrefix) {
-				latencyStr := k[ltPrefixLen:]
-				latency, _ := strconv.Atoi(latencyStr)
-
-				if latency <= 500 {
-					goodCount += int(v)
-				}
-				total += int(v)
-			} else if strings.HasPrefix(k, gtPrefix) {
-				total += int(v)
-			}
-		}
+		goodCount, total := c.statCounters(counters)
 
 		if total == 0 {
 			fmt.Println("<<< Total is zero!")
@@ -366,7 +352,43 @@ func (c *Controller) trySender(count int, cfg *benchmark.AutorunConfig) bool {
 		time.Sleep(2 * time.Second)
 	}
 
+	passed := pass >= cfg.PassRound
+	fmt.Printf("<<< connection %d - passed: %v, pass: %d, fail: %d\n", count, passed, pass, cfg.Round-pass)
+
+	fmt.Print(">>> reset senders")
+	c.send([]string{"s", "0"})
+	for {
+		c.doInvoke("Clear", "message")
+		time.Sleep(time.Second)
+		counters := c.collectCounters()
+		_, total := c.statCounters(counters)
+		if total < 10 {
+			break
+		}
+		fmt.Print(".")
+	}
+	fmt.Println()
+
 	return pass >= cfg.PassRound
+}
+
+func (c *Controller) statCounters(counters map[string]int64) (int, int) {
+	goodCount := 0
+	total := 0
+	for k, v := range counters {
+		if strings.HasPrefix(k, ltPrefix) {
+			latencyStr := k[ltPrefixLen:]
+			latency, _ := strconv.Atoi(latencyStr)
+
+			if latency <= 500 {
+				goodCount += int(v)
+			}
+			total += int(v)
+		} else if strings.HasPrefix(k, gtPrefix) {
+			total += int(v)
+		}
+	}
+	return goodCount, total
 }
 
 func (c *Controller) batchRun(config *benchmark.Config) error {

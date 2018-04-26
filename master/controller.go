@@ -276,7 +276,7 @@ const upperBound = 10000
 func (c *Controller) autoRun(config *benchmark.Config) error {
 	// TODO: parameterize control bounds and steps
 	senderLimit := upperBound
-	for i := 100; i <= 10000; i += 100 {
+	for i := 100; i <= upperBound; i += 100 {
 		fmt.Printf(">>> connect %d\n", i)
 		c.connect([]string{"c", strconv.Itoa(i)})
 
@@ -306,6 +306,13 @@ func (c *Controller) autoRun(config *benchmark.Config) error {
 		}
 
 		fmt.Printf("connection: %d, sender: %d", i, lower)
+
+		// the server / service cannot support the same number of senders as the connections.
+		// in the next cycle when we increase the connections, we expect the connections to be
+		// lower than the current limit (set a 25% buffer to allow possible disturbance)
+		if lower < i {
+			senderLimit = lower + lower/4
+		}
 	}
 	return nil
 }
@@ -597,10 +604,13 @@ func (c *Controller) Run(config *benchmark.Config) error {
 	}()
 
 	c.createOutDir(config.OutDir)
-	if config.CmdFile == "" {
+	if config.Mode == "interactive" {
 		return c.interactiveRun()
+	} else if config.CmdFile == "" || config.Mode == "auto" {
+		return c.autoRun(config)
+	} else {
+		return c.batchRun(config)
 	}
-	return c.batchRun(config)
 }
 
 func init() {

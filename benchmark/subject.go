@@ -16,6 +16,7 @@ type Config struct {
 	Subject string
 	CmdFile string
 	OutDir  string
+	Mode    string
 }
 
 // Subject defines the interface for a test subject.

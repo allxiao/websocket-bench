@@ -81,6 +81,7 @@ func doStartInteractiveMaster(c *master.Controller, agents []string) {
 		Subject: opts.Subject,
 		CmdFile: opts.CmdFile,
 		OutDir:  opts.OutputDir,
+		Mode:    opts.Mode,
 	})
 }
 
